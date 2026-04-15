@@ -416,14 +416,17 @@ async fn generate_videos(
         let output_path = output_dir.join(&filename);
 
         let seed: u32 = rand::thread_rng().gen();
-        let hue: f32 = rand::thread_rng().gen_range(0.0..360.0);
 
         let filter = match config.content_type.as_str() {
-            "solid" => format!(
-                "color=c=0x{:06x}:s={}x{}:d={}",
-                (hue / 360.0 * 16777215.0) as u32,
-                config.width, config.height, duration_str
-            ),
+            "solid" => {
+                // Use seed to ensure unique colors
+                let color_hue = (seed % 360) as f32;
+                format!(
+                    "color=c=0x{:06x}:s={}x{}:d={}",
+                    (color_hue / 360.0 * 16777215.0) as u32,
+                    config.width, config.height, duration_str
+                )
+            }
             "gradient" => format!(
                 "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}",
                 config.width, config.height, seed, duration_str
@@ -432,10 +435,15 @@ async fn generate_videos(
                 "testsrc2=size={}x{}",
                 config.width, config.height
             ),
-            _ => format!(
-                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
-                seed, config.width, config.height, config.width, config.height
-            ),
+            _ => {
+                // Use different cellauto rules to ensure unique output since pattern=random is deterministic
+                let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
+                let rule = rules[(seed % rules.len() as u32) as usize];
+                format!(
+                    "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
+                    rule, seed, config.width, config.height, config.width, config.height
+                )
+            },
         };
 
         let fps_str = config.fps.to_string();
