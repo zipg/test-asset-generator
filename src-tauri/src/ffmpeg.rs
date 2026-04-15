@@ -55,11 +55,17 @@ pub fn run_ffmpeg(args: &[String]) -> Result<String, String> {
     let output = Command::new(&ffmpeg_path)
         .args(args)
         .output()
-        .map_err(|e| format!("Failed to execute ffmpeg: {}", e))?;
+        .map_err(|e| format!("Failed to execute ffmpeg ({}): {}", ffmpeg_path.display(), e))?;
+
+    // Combine stdout and stderr for better error messages
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let combined = if stdout.is_empty() { stderr.clone() } else { stdout };
 
     if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stderr).to_string())
+        Ok(combined)
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
+        let exit_code = output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "unknown".to_string());
+        Err(format!("FFmpeg failed: {} | exit: {} | path: {}", combined.trim(), exit_code, ffmpeg_path.display()))
     }
 }
