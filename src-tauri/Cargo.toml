@@ -1,5 +1,5 @@
 [package]
-name = "test-asset-generator"
+name = "muse-generator"
 version = "1.0.0"
 edition = "2021"
 

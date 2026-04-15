@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Test Asset Generator",
+        "title": "Muse Generator",
         "width": 560,
         "height": 700,
         "resizable": true,
