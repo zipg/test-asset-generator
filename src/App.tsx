@@ -20,6 +20,7 @@ export default function App() {
     config,
     updateConfig,
     estimateSize,
+    downloadFFmpeg,
     generateImages,
     generateAudio,
     generateVideos,
@@ -73,6 +74,7 @@ export default function App() {
     setResult(null);
     setProgress(null);
     try {
+      await downloadFFmpeg();
       const res = await generateImages(
         config.imageConfig as unknown as Record<string, unknown>,
         config.savePath
@@ -83,7 +85,7 @@ export default function App() {
     } finally {
       setGenerating(false);
     }
-  }, [config, generateImages]);
+  }, [config, generateImages, downloadFFmpeg]);
 
   const handleGenerateAudio = useCallback(async () => {
     if (!config?.savePath) return;
@@ -91,6 +93,7 @@ export default function App() {
     setResult(null);
     setProgress(null);
     try {
+      await downloadFFmpeg();
       const res = await generateAudio(
         config.audioConfig as unknown as Record<string, unknown>,
         config.savePath
@@ -101,7 +104,7 @@ export default function App() {
     } finally {
       setGenerating(false);
     }
-  }, [config, generateAudio]);
+  }, [config, generateAudio, downloadFFmpeg]);
 
   const handleGenerateVideos = useCallback(async () => {
     if (!config?.savePath) return;
@@ -109,6 +112,7 @@ export default function App() {
     setResult(null);
     setProgress(null);
     try {
+      await downloadFFmpeg();
       const res = await generateVideos(
         config.videoConfig as unknown as Record<string, unknown>,
         config.savePath
@@ -119,7 +123,7 @@ export default function App() {
     } finally {
       setGenerating(false);
     }
-  }, [config, generateVideos]);
+  }, [config, generateVideos, downloadFFmpeg]);
 
   if (!config) {
     return <div className="app-container"><div style={{ padding: "24px" }}>加载中...</div></div>;

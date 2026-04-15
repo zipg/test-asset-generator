@@ -23,10 +23,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"],
-    "resources": {
-      "ffmpeg/mac/ffmpeg": "ffmpeg/mac/ffmpeg",
-      "ffmpeg/win/ffmpeg.exe": "ffmpeg/win/ffmpeg.exe"
-    }
+    "icon": ["icons/icon.ico", "icons/icon.icns", "icons/icon.png"]
   }
 }

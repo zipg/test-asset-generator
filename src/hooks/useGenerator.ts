@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, TaskResult } from "../types";
 
 export function useGenerator() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -32,6 +31,15 @@ export function useGenerator() {
 
   const selectPath = useCallback(async (): Promise<string | null> => {
     return invoke<string | null>("select_save_path");
+  }, []);
+
+  const downloadFFmpeg = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const result = await invoke<string>("download_ffmpeg");
+      return { success: true, message: result };
+    } catch (e) {
+      return { success: false, message: String(e) };
+    }
   }, []);
 
   const generateImages = useCallback(
@@ -101,6 +109,7 @@ export function useGenerator() {
     loading,
     estimateSize,
     selectPath,
+    downloadFFmpeg,
     generateImages,
     generateAudio,
     generateVideos,
