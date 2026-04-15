@@ -129,9 +129,12 @@ async fn download_ffmpeg() -> Result<String, String> {
         std::io::copy(&mut std::io::Cursor::new(bytes), &mut ffmpeg_file)
             .map_err(|e| format!("Failed to write ffmpeg: {}", e))?;
 
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&ffmpeg_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&ffmpeg_path, std::fs::Permissions::from_mode(0o755))
+                .map_err(|e| format!("Failed to set permissions: {}", e))?;
+        }
     }
 
     // Verify the downloaded file is executable
