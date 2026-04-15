@@ -14,10 +14,12 @@ jobs:
         include:
           - platform: "macos-latest"
             target: "aarch64-apple-darwin"
-            artifact: "Test-Asset-Generator-macOS"
+            artifact: "Muse_Generator-macOS"
+            bundles: "dmg"
           - platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
-            artifact: "Test-Asset-Generator-Windows"
+            artifact: "Muse_Generator-Windows"
+            bundles: "msi"
 
     runs-on: ${{ matrix.platform }}
 
@@ -58,7 +60,7 @@ jobs:
         run: npm install
 
       - name: Build Tauri app
-        run: npm run tauri build -- --target ${{ matrix.target }}
+        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
         env:
           CARGO_INCREMENTAL: 0
 
