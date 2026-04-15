@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { AppConfig, TaskResult } from "../types";
 
 export function useGenerator() {
   const [config, setConfig] = useState<AppConfig | null>(null);
