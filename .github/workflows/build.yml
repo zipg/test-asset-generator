@@ -36,20 +36,15 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
 
-      - name: Download FFmpeg (macOS)
-        if: matrix.platform == 'macos-latest'
+      - name: Download FFmpeg
         run: |
-          mkdir -p ffmpeg/mac
+          mkdir -p ffmpeg/mac ffmpeg/win
+          # macOS FFmpeg
           curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o /tmp/ffmpeg.zip
           unzip -o /tmp/ffmpeg.zip -d ffmpeg/mac/
           chmod +x ffmpeg/mac/ffmpeg
           rm /tmp/ffmpeg.zip
-
-      - name: Download FFmpeg (Windows)
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          mkdir -p ffmpeg/win
+          # Windows FFmpeg
           $tempZip = "$env:TEMP\ffmpeg.zip"
           Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip" -OutFile $tempZip
           Expand-Archive -Path $tempZip -DestinationPath $env:TEMP -Force
