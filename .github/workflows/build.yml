@@ -19,7 +19,7 @@ jobs:
           - platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
             artifact: "Muse_Generator-Windows"
-            bundles: "none"
+            bundles: "nsis"
 
     runs-on: ${{ matrix.platform }}
 
@@ -68,5 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/**
+            src-tauri/target/${{ matrix.target }}/release/muse-generator.exe
           retention-days: 14
