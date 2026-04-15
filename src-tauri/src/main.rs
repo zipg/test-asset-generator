@@ -432,8 +432,8 @@ async fn generate_videos(
                 config.width, config.height
             ),
             _ => format!(
-                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor;framerate=fps={}",
-                seed, config.width, config.height, config.width, config.height, config.fps
+                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
+                seed, config.width, config.height, config.width, config.height
             ),
         };
 
