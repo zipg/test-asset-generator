@@ -34,10 +34,24 @@ fn main() {
 fn get_config(app: tauri::AppHandle) -> AppConfig {
     config::load_config(&app)
 }
-
 #[tauri::command]
 async fn download_ffmpeg() -> Result<String, String> {
     let os = std::env::consts::OS;
+
+    // Detect system architecture
+    let arch = if os == "macos" {
+        let output = std::process::Command::new("uname").arg("-m").output();
+        match output {
+            Ok(o) => {
+                let arch_str = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                if arch_str == "arm64" { "arm64" } else { "x86_64" }
+            },
+            Err(_) => "x86_64",
+        }
+    } else {
+        "x86_64"
+    };
+
     let (url, exe_name) = match os {
         "windows" => (
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
@@ -50,17 +64,24 @@ async fn download_ffmpeg() -> Result<String, String> {
         _ => return Err(format!("Unsupported OS: {}", os)),
     };
 
-    // Check if already downloaded
-    if let Some(ffmpeg_dir) = ffmpeg::get_ffmpeg_dir() {
-        let ffmpeg_path = ffmpeg_dir.join(exe_name);
-        if ffmpeg_path.exists() {
-            return Ok("already_exists".to_string());
-        }
-    }
-
     // Create download directory
     let download_dir = ffmpeg::get_ffmpeg_dir()
         .ok_or_else(|| "Failed to get app data directory".to_string())?;
+
+    let ffmpeg_path = download_dir.join(exe_name);
+
+    // Check if already downloaded and executable
+    if ffmpeg_path.exists() {
+        match std::process::Command::new(&ffmpeg_path).arg("--version").output() {
+            Ok(output) if output.status.success() => {
+                return Ok("already_exists".to_string());
+            }
+            _ => {
+                // Invalid or incompatible binary, remove it
+                let _ = std::fs::remove_file(&ffmpeg_path);
+            }
+        }
+    }
 
     std::fs::create_dir_all(&download_dir)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
@@ -70,49 +91,62 @@ async fn download_ffmpeg() -> Result<String, String> {
         .await
         .map_err(|e| format!("Failed to download FFmpeg: {}", e))?;
 
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}", response.status()));
+    }
+
     let bytes = response.bytes()
         .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
     // Extract based on OS
     if os == "windows" {
-        // Windows: extract from zip
         let cursor = std::io::Cursor::new(bytes);
         let mut archive = zip::ZipArchive::new(cursor)
             .map_err(|e| format!("Failed to read zip: {}", e))?;
 
-        let mut ffmpeg_file = std::fs::File::create(download_dir.join("ffmpeg.exe"))
+        let mut ffmpeg_file = std::fs::File::create(&ffmpeg_path)
             .map_err(|e| format!("Failed to create file: {}", e))?;
 
-        // Find and extract ffmpeg.exe from the zip
+        let mut found = false;
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)
                 .map_err(|e| format!("Failed to read zip entry: {}", e))?;
             if file.name().ends_with("ffmpeg.exe") {
                 std::io::copy(&mut file, &mut ffmpeg_file)
                     .map_err(|e| format!("Failed to write ffmpeg.exe: {}", e))?;
+                found = true;
                 break;
             }
         }
+        if !found {
+            return Err("ffmpeg.exe not found in zip".to_string());
+        }
     } else {
-        // macOS: the zip contains just the ffmpeg binary
-        let mut ffmpeg_file = std::fs::File::create(download_dir.join("ffmpeg"))
+        // macOS
+        let mut ffmpeg_file = std::fs::File::create(&ffmpeg_path)
             .map_err(|e| format!("Failed to create file: {}", e))?;
         std::io::copy(&mut std::io::Cursor::new(bytes), &mut ffmpeg_file)
             .map_err(|e| format!("Failed to write ffmpeg: {}", e))?;
 
-        // Make executable
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(download_dir.join("ffmpeg"), std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| format!("Failed to set permissions: {}", e))?;
-        }
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&ffmpeg_path, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
     }
 
-    Ok("downloaded".to_string())
+    // Verify the downloaded file is executable
+    match std::process::Command::new(&ffmpeg_path).arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            Ok("downloaded".to_string())
+        }
+        Ok(_) => {
+            Err("FFmpeg downloaded but failed to run".to_string())
+        }
+        Err(e) => {
+            Err(format!("FFmpeg is not executable: {}. Consider installing via: brew install ffmpeg", e))
+        }
+    }
 }
-
 #[tauri::command]
 fn save_config(app: tauri::AppHandle, cfg: AppConfig) {
     config::save_config(&app, &cfg);
