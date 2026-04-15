@@ -419,20 +419,20 @@ async fn generate_videos(
 
         let filter = match config.content_type.as_str() {
             "solid" => format!(
-                "color=c=0x{:06x}:s={}x{}:d={}[v]",
+                "color=c=0x{:06x}:s={}x{}:d={}",
                 (hue / 360.0 * 16777215.0) as u32,
                 config.width, config.height, duration_str
             ),
             "gradient" => format!(
-                "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}[v]",
+                "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}",
                 config.width, config.height, seed, duration_str
             ),
             "pattern" => format!(
-                "testsrc2=size={}x{}[v]",
+                "testsrc2=size={}x{}",
                 config.width, config.height
             ),
             _ => format!(
-                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor[v];[v]framerate=fps={}[v]",
+                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor;framerate=fps={}",
                 seed, config.width, config.height, config.width, config.height, config.fps
             ),
         };
@@ -511,17 +511,17 @@ fn build_image_filter(content_type: &str, width: u32, height: u32) -> String {
     let hue: f32 = rand::thread_rng().gen_range(0.0..360.0);
     match content_type {
         "solid" => format!(
-            "color=c=0x{:06x}:s={}x{}:d=1[v]",
+            "color=c=0x{:06x}:s={}x{}:d=1",
             (hue / 360.0 * 16777215.0) as u32,
             width, height
         ),
         "gradient" => format!(
-            "gradients=s={}x{}:c0=random:c1=random:seed={}[v]",
+            "gradients=s={}x{}:c0=random:c1=random:seed={}",
             width, height, seed
         ),
-        "pattern" => format!("testsrc2=size={}x{}[v]", width, height),
+        "pattern" => format!("testsrc2=size={}x{}", width, height),
         _ => format!(
-            "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor[v]",
+            "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
             seed, width, height, width, height
         ),
     }
