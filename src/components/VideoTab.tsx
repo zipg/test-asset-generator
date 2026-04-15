@@ -12,8 +12,8 @@ interface Props {
 
 const FORMAT_OPTIONS: VideoFormat[] = ["MP4", "MOV", "WEBM"];
 const CODEC_OPTIONS: { value: Codec; label: string }[] = [
-  { value: "hevc", label: "H.265" },
   { value: "h264", label: "H.264" },
+  { value: "hevc", label: "H.265" },
 ];
 const FPS_OPTIONS = [30, 60];
 const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
@@ -22,6 +22,8 @@ const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
   { value: "gradient", label: "渐变" },
   { value: "pattern", label: "图案(彩条)" },
 ];
+
+const ASPECT_RATIO = 16 / 9; // height / width for 9:16
 
 export default function VideoTab({
   config,
@@ -32,6 +34,7 @@ export default function VideoTab({
   generating,
 }: Props) {
   const [estimate, setEstimate] = useState("");
+  const [lockAspect, setLockAspect] = useState(true);
 
   useEffect(() => {
     onEstimate({
@@ -44,6 +47,24 @@ export default function VideoTab({
       count: config.count,
     }).then(setEstimate);
   }, [config, onEstimate]);
+
+  const handleWidthChange = useCallback((w: number) => {
+    if (lockAspect) {
+      const h = Math.round(w * ASPECT_RATIO);
+      onConfigChange({ width: w, height: h });
+    } else {
+      onConfigChange({ width: w });
+    }
+  }, [lockAspect, onConfigChange]);
+
+  const handleHeightChange = useCallback((h: number) => {
+    if (lockAspect) {
+      const w = Math.round(h / ASPECT_RATIO);
+      onConfigChange({ width: w, height: h });
+    } else {
+      onConfigChange({ height: h });
+    }
+  }, [lockAspect, onConfigChange]);
 
   const handleStart = useCallback(() => {
     if (!savePath) {
@@ -84,15 +105,23 @@ export default function VideoTab({
             type="number"
             value={config.width}
             min={1}
-            onChange={(e) => onConfigChange({ width: parseInt(e.target.value) || 1 })}
+            onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
           />
           <span>x</span>
           <input
             type="number"
             value={config.height}
             min={1}
-            onChange={(e) => onConfigChange({ height: parseInt(e.target.value) || 1 })}
+            onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
           />
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={lockAspect}
+              onChange={(e) => setLockAspect(e.target.checked)}
+            />
+            锁定9:16
+          </label>
         </div>
       </div>
       <div className="form-row">

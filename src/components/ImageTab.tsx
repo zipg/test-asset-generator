@@ -18,6 +18,8 @@ const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
   { value: "pattern", label: "图案(彩条)" },
 ];
 
+const ASPECT_RATIO = 16 / 9; // height / width for 9:16
+
 export default function ImageTab({
   config,
   savePath,
@@ -27,6 +29,7 @@ export default function ImageTab({
   generating,
 }: Props) {
   const [estimate, setEstimate] = useState("");
+  const [lockAspect, setLockAspect] = useState(true);
 
   useEffect(() => {
     onEstimate({
@@ -36,6 +39,24 @@ export default function ImageTab({
       count: config.count,
     }).then(setEstimate);
   }, [config, onEstimate]);
+
+  const handleWidthChange = useCallback((w: number) => {
+    if (lockAspect) {
+      const h = Math.round(w * ASPECT_RATIO);
+      onConfigChange({ width: w, height: h });
+    } else {
+      onConfigChange({ width: w });
+    }
+  }, [lockAspect, onConfigChange]);
+
+  const handleHeightChange = useCallback((h: number) => {
+    if (lockAspect) {
+      const w = Math.round(h / ASPECT_RATIO);
+      onConfigChange({ width: w, height: h });
+    } else {
+      onConfigChange({ height: h });
+    }
+  }, [lockAspect, onConfigChange]);
 
   const handleStart = useCallback(() => {
     if (!savePath) {
@@ -65,15 +86,23 @@ export default function ImageTab({
             type="number"
             value={config.width}
             min={1}
-            onChange={(e) => onConfigChange({ width: parseInt(e.target.value) || 1 })}
+            onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
           />
           <span>x</span>
           <input
             type="number"
             value={config.height}
             min={1}
-            onChange={(e) => onConfigChange({ height: parseInt(e.target.value) || 1 })}
+            onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
           />
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={lockAspect}
+              onChange={(e) => setLockAspect(e.target.checked)}
+            />
+            锁定9:16
+          </label>
         </div>
       </div>
       <div className="form-row">

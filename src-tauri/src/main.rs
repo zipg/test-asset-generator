@@ -231,7 +231,7 @@ async fn generate_images(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -251,8 +251,9 @@ async fn generate_images(
         };
         let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
         let output_path = output_dir.join(&filename);
+        let seed: u32 = rand::thread_rng().gen();
 
-        let filter = build_image_filter(&config.content_type, config.width, config.height);
+        let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
 
         let mut args: Vec<String> = vec![
             "-f".to_string(), "lavfi".to_string(),
@@ -307,7 +308,7 @@ async fn generate_audio(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -390,7 +391,7 @@ async fn generate_videos(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -480,9 +481,10 @@ async fn generate_videos(
     }))
 }
 
-fn create_timestamp_dir(base: &str) -> Result<std::path::PathBuf, String> {
+fn create_timestamp_dir(base: &str, prefix: &str) -> Result<std::path::PathBuf, String> {
     let now = chrono_lite_timestamp();
-    let dir = std::path::PathBuf::from(base).join(&now);
+    let dir_name = format!("{}_{}", prefix, now);
+    let dir = std::path::PathBuf::from(base).join(&dir_name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;
     Ok(dir)
 }
@@ -493,21 +495,20 @@ fn chrono_lite_timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap();
     let secs = dur.as_secs();
-    let days = secs / 86400;
     let remaining = secs % 86400;
     let hours = remaining / 3600;
     let minutes = (remaining % 3600) / 60;
     let seconds = remaining % 60;
+    let days = secs / 86400;
     let year_days = days;
     let year = 1970 + year_days / 365;
     let yday = year_days % 365;
     let month = yday / 30 + 1;
     let day = yday % 30 + 1;
-    format!("{:04}-{:02}-{:02}-{:02}-{:02}-{:02}", year, month, day, hours, minutes, seconds)
+    format!("{:02}{:02}_{:02}{:02}{:02}", month, day, hours, minutes, seconds)
 }
 
-fn build_image_filter(content_type: &str, width: u32, height: u32) -> String {
-    let seed: u32 = rand::thread_rng().gen();
+fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) -> String {
     let hue: f32 = rand::thread_rng().gen_range(0.0..360.0);
     match content_type {
         "solid" => format!(
@@ -520,10 +521,15 @@ fn build_image_filter(content_type: &str, width: u32, height: u32) -> String {
             width, height, seed
         ),
         "pattern" => format!("testsrc2=size={}x{}", width, height),
-        _ => format!(
-            "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
-            seed, width, height, width, height
-        ),
+        _ => {
+            // Use different cellauto rules to ensure unique output since pattern=random is deterministic
+            let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
+            let rule = rules[(seed % rules.len() as u32) as usize];
+            format!(
+                "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
+                rule, seed, width, height, width, height
+            )
+        }
     }
 }
 
