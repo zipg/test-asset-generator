@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Muse Generator",
+        "title": "Muse测试素材生成器",
         "width": 560,
         "height": 700,
         "resizable": true,
