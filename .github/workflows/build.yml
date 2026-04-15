@@ -19,7 +19,7 @@ jobs:
           - platform: "windows-latest"
             target: "x86_64-pc-windows-msvc"
             artifact: "Muse_Generator-Windows"
-            bundles: "msi"
+            bundles: "none"
 
     runs-on: ${{ matrix.platform }}
 
