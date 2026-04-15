@@ -9,27 +9,36 @@ pub fn get_ffmpeg_path() -> PathBuf {
     if let Some(app_data) = dirs::data_local_dir() {
         let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
         if downloaded.exists() {
-            return downloaded;
+            // Verify it's actually executable
+            if Command::new(&downloaded).arg("--version").output().map(|o| o.status.success()).unwrap_or(false) {
+                return downloaded;
+            }
         }
     }
 
-    // 2. Try system PATH
+    // 2. Try homebrew paths for macOS (important for Apple Silicon)
+    if os == "macos" {
+        let homebrew_paths = [
+            "/opt/homebrew/bin/ffmpeg",      // Apple Silicon homebrew
+            "/usr/local/bin/ffmpeg",          // Intel homebrew
+            "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
+            "/usr/local/opt/ffmpeg/bin/ffmpeg",
+        ];
+        for path in &homebrew_paths {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                return p.to_path_buf();
+            }
+        }
+    }
+
+    // 3. Try system PATH
     if let Ok(path_var) = std::env::var("PATH") {
         for path_dir in path_var.split(std::path::MAIN_SEPARATOR) {
             let from_path = std::path::Path::new(path_dir).join(exe_name);
             if from_path.exists() {
                 return from_path;
             }
-        }
-    }
-
-    // 3. Try development path
-    if let Some(dev_path) = std::env::current_dir()
-        .ok()
-        .map(|p| p.join("ffmpeg").join(os).join(exe_name))
-    {
-        if dev_path.exists() {
-            return dev_path;
         }
     }
 
