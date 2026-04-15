@@ -7,6 +7,22 @@ pub fn get_ffmpeg_path() -> PathBuf {
 
     // Try bundled path relative to executable (production)
     if let Some(exe_dir) = std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.to_path_buf())) {
+        // On macOS app bundle: executable is in Contents/MacOS/, resources are in Contents/Resources/
+        // So we need to go up two levels to reach the app root, then into Resources
+        let app_root = if os == "macos" {
+            exe_dir.parent().and_then(|p| p.parent()).map(|p| p.to_path_buf())
+        } else {
+            Some(exe_dir.clone())
+        };
+
+        if let Some(root) = app_root {
+            let bundled = root.join("Resources").join("ffmpeg").join(os).join(exe_name);
+            if bundled.exists() {
+                return bundled;
+            }
+        }
+
+        // Fallback: try directly next to executable (Windows/dev builds)
         let bundled = exe_dir.join("ffmpeg").join(os).join(exe_name);
         if bundled.exists() {
             return bundled;

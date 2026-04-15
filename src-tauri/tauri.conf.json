@@ -25,7 +25,8 @@
     "targets": "all",
     "icon": ["icons/icon.png"],
     "resources": {
-      "ffmpeg/*": "ffmpeg/"
+      "ffmpeg/mac/ffmpeg": "ffmpeg/mac/ffmpeg",
+      "ffmpeg/win/ffmpeg.exe": "ffmpeg/win/ffmpeg.exe"
     }
   },
   "plugins": {
