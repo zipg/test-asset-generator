@@ -38,6 +38,8 @@ export interface VideoConfig {
 }
 
 export interface AppConfig {
+  /** Persisted by Rust; omit on old clients — do not strip when saving. */
+  schemaVersion?: number;
   savePath: string | null;
   imageConfig: ImageConfig;
   audioConfig: AudioConfig;

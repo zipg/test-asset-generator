@@ -42,6 +42,9 @@ pub struct VideoConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfig {
+    /// Bumps when defaults change so we can migrate persisted JSON once.
+    #[serde(default)]
+    pub schema_version: u32,
     pub save_path: Option<String>,
     pub image_config: ImageConfig,
     pub audio_config: AudioConfig,
@@ -51,6 +54,7 @@ pub struct AppConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            schema_version: 1,
             save_path: None,
             image_config: ImageConfig {
                 format: "PNG".to_string(),
@@ -92,11 +96,31 @@ fn config_path(app_handle: &tauri::AppHandle) -> PathBuf {
     dir.join("config.json")
 }
 
+/// Old installs defaulted image/video content to `noise`; product default is now `gradient`.
+/// Old `config.json` had no `schemaVersion` (deserializes as 0): bump to 1 and persist once.
+fn migrate_schema_version(cfg: &mut AppConfig) -> bool {
+    if cfg.schema_version >= 1 {
+        return false;
+    }
+    if cfg.image_config.content_type == "noise" {
+        cfg.image_config.content_type = "gradient".to_string();
+    }
+    if cfg.video_config.content_type == "noise" {
+        cfg.video_config.content_type = "gradient".to_string();
+    }
+    cfg.schema_version = 1;
+    true
+}
+
 pub fn load_config(app_handle: &tauri::AppHandle) -> AppConfig {
     let path = config_path(app_handle);
     if path.exists() {
         let contents = fs::read_to_string(&path).expect("Failed to read config");
-        serde_json::from_str(&contents).unwrap_or_default()
+        let mut cfg: AppConfig = serde_json::from_str(&contents).unwrap_or_default();
+        if migrate_schema_version(&mut cfg) {
+            save_config(app_handle, &cfg);
+        }
+        cfg
     } else {
         AppConfig::default()
     }
@@ -104,6 +128,17 @@ pub fn load_config(app_handle: &tauri::AppHandle) -> AppConfig {
 
 pub fn save_config(app_handle: &tauri::AppHandle, config: &AppConfig) {
     let path = config_path(app_handle);
-    let contents = serde_json::to_string_pretty(config).expect("Failed to serialize config");
+    let mut out = config.clone();
+    // Frontend may omit `schemaVersion` in JSON; avoid downgrading a migrated file back to 0.
+    if out.schema_version == 0 && path.exists() {
+        if let Ok(contents) = fs::read_to_string(&path) {
+            if let Ok(prev) = serde_json::from_str::<AppConfig>(&contents) {
+                if prev.schema_version >= 1 {
+                    out.schema_version = prev.schema_version;
+                }
+            }
+        }
+    }
+    let contents = serde_json::to_string_pretty(&out).expect("Failed to serialize config");
     fs::write(&path, contents).expect("Failed to write config");
 }
