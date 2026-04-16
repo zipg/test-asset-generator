@@ -135,6 +135,18 @@ async fn download_ffmpeg() -> Result<String, String> {
         }
     }
 
+    // Must stay consistent with check_ffmpeg(): that command returns "found" on macOS when
+    // Homebrew binaries exist on disk even if this process cannot exec-verify them (e.g. some
+    // GUI environments). Without this branch we always hit the network and reqwest may fail
+    // with "error decoding response body" while the user already has brew ffmpeg.
+    if os == "macos" {
+        if std::path::Path::new("/opt/homebrew/bin/ffmpeg").exists()
+            || std::path::Path::new("/usr/local/bin/ffmpeg").exists()
+        {
+            return Ok("already_exists".to_string());
+        }
+    }
+
     // No valid FFmpeg found, need to download
     let (url, exe_name) = match os {
         "windows" => (

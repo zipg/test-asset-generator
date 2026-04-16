@@ -7,7 +7,34 @@ pub fn get_ffmpeg_path() -> PathBuf {
     let os = std::env::consts::OS;
     let exe_name = if os == "windows" { "ffmpeg.exe" } else { "ffmpeg" };
 
-    // 1. Try app data directory first (where we download FFmpeg to)
+    let homebrew_paths = [
+        "/opt/homebrew/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg",
+        "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
+        "/usr/local/opt/ffmpeg/bin/ffmpeg",
+    ];
+
+    // macOS: match check_ffmpeg resolution — prefer `which` and Homebrew before any
+    // previously downloaded copy (avoids a corrupt partial download shadowing brew).
+    if os == "macos" {
+        if let Ok(output) = Command::new("/usr/bin/which").arg("ffmpeg").output() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() && path != "ffmpeg not found" {
+                let p = std::path::Path::new(&path);
+                if p.exists() {
+                    return p.to_path_buf();
+                }
+            }
+        }
+        for path in &homebrew_paths {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                return p.to_path_buf();
+            }
+        }
+    }
+
+    // 1. Bundled / downloaded copy in app data (Windows zip extract, or macOS fallback)
     if let Some(app_data) = dirs::data_local_dir() {
         let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
         if downloaded.exists() {
@@ -15,14 +42,8 @@ pub fn get_ffmpeg_path() -> PathBuf {
         }
     }
 
-    // 2. Try homebrew paths for macOS (important for Apple Silicon)
-    if os == "macos" {
-        let homebrew_paths = [
-            "/opt/homebrew/bin/ffmpeg",      // Apple Silicon homebrew
-            "/usr/local/bin/ffmpeg",          // Intel homebrew
-            "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
-            "/usr/local/opt/ffmpeg/bin/ffmpeg",
-        ];
+    // 2. Homebrew paths when not handled above (e.g. non-macOS never runs the macOS block)
+    if os != "macos" {
         for path in &homebrew_paths {
             let p = std::path::Path::new(path);
             if p.exists() {
