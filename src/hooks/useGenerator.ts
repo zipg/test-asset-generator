@@ -2,12 +2,6 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, TaskResult } from "../types";
 
-const CONTENT_TYPES = ["noise", "solid", "gradient", "pattern"] as const;
-
-function randomContentType() {
-  return CONTENT_TYPES[Math.floor(Math.random() * CONTENT_TYPES.length)];
-}
-
 export function useGenerator() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,14 +15,7 @@ export function useGenerator() {
     }).catch(() => setFfmpegReady(false));
 
     invoke<AppConfig>("get_config")
-      .then((cfg) => {
-        // Randomize content type on startup for all media types
-        setConfig({
-          ...cfg,
-          imageConfig: { ...cfg.imageConfig, contentType: randomContentType() },
-          videoConfig: { ...cfg.videoConfig, contentType: randomContentType() },
-        });
-      })
+      .then((cfg) => setConfig(cfg))
       .catch(console.error);
   }, []);
 

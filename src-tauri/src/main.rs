@@ -730,8 +730,12 @@ async fn generate_videos(
                     config.width, config.height, seed, duration_str
                 ),
                 "pattern" => format!(
-                    "testsrc2=size={}x{}",
-                    config.width, config.height
+                    "testsrc2=size={}x{}:rate={}:duration={},hue=h={}",
+                    config.width,
+                    config.height,
+                    config.fps,
+                    duration_str,
+                    (seed % 360) as f32
                 ),
                 _ => {
                     // Use random_fill_ratio to ensure unique output - pattern=random ignores seed
@@ -860,7 +864,13 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
             "gradients=s={}x{}:c0=random:c1=random:seed={}",
             width, height, seed
         ),
-        "pattern" => format!("testsrc2=size={}x{}", width, height),
+        // testsrc2 alone is identical every run; hue shifts bars so each seed yields a distinct image (unique MD5).
+        "pattern" => format!(
+            "testsrc2=size={}x{},hue=h={}",
+            width,
+            height,
+            (seed % 360) as f32
+        ),
         _ => {
             // Use random_fill_ratio to ensure unique output - pattern=random ignores seed
             // but random_fill_ratio + random_seed together produce truly unique outputs

@@ -45,7 +45,12 @@ pub fn build_image_filter(content_type: &str, width: u32, height: u32) -> String
             "gradients=s={}x{}:c0=random:c1=random:seed={}[v]",
             width, height, seed
         ),
-        "pattern" => format!("testsrc2=size={}x{}[v]", width, height),
+        "pattern" => format!(
+            "testsrc2=size={}x{},hue=h={}[v]",
+            width,
+            height,
+            (seed % 360) as f32
+        ),
         _ /* noise */ => format!(
             "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor[v]",
             seed, width, height, width, height
