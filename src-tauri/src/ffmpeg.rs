@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+use tauri::path::BaseDirectory;
+use tauri::Manager;
 
 fn where_ffmpeg_exe_lines() -> Option<String> {
     let output = Command::new("where.exe").arg("ffmpeg.exe").output().ok()?;
@@ -50,6 +52,60 @@ pub fn first_working_windows_ffmpeg_from_where() -> Option<PathBuf> {
     None
 }
 
+/// True if the Windows installer / dev resources ship `ffmpeg.exe` (see `bundle.resources`).
+pub fn bundled_resource_ffmpeg_exists(app: &tauri::AppHandle) -> bool {
+    if std::env::consts::OS != "windows" {
+        return false;
+    }
+    for rel in ["ffmpeg.exe", "resources/ffmpeg.exe"] {
+        if let Ok(p) = app.path().resolve(rel, BaseDirectory::Resource) {
+            if p.exists() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Copy shipped `resources/ffmpeg.exe` from the app bundle to LocalAppData (first run / repair).
+pub fn ensure_windows_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<(), String> {
+    if std::env::consts::OS != "windows" {
+        return Ok(());
+    }
+    for rel in ["ffmpeg.exe", "resources/ffmpeg.exe"] {
+        let src = match app.path().resolve(rel, BaseDirectory::Resource) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if !src.exists() {
+            continue;
+        }
+        let Some(dest_dir) = get_ffmpeg_dir() else {
+            return Ok(());
+        };
+        let dest = dest_dir.join("ffmpeg.exe");
+        let need_copy = !dest.exists()
+            || Command::new(&dest)
+                .arg("--version")
+                .output()
+                .map(|o| !o.status.success())
+                .unwrap_or(true);
+        if !need_copy {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+        std::fs::copy(&src, &dest).map_err(|e| {
+            format!(
+                "Failed to copy bundled FFmpeg to {}: {}",
+                dest.display(),
+                e
+            )
+        })?;
+        return Ok(());
+    }
+    Ok(())
+}
+
 /// Optional portable layout: `ffmpeg.exe` or `ffmpeg/ffmpeg.exe` next to the app `.exe`.
 pub fn bundled_ffmpeg_beside_executable_windows() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
@@ -70,6 +126,13 @@ pub fn get_ffmpeg_path() -> PathBuf {
     if os == "windows" {
         if let Some(p) = bundled_ffmpeg_beside_executable_windows() {
             return p;
+        }
+        // Prefer LocalAppData (bundled copy or prior download) over whatever `where` finds on PATH.
+        if let Some(app_data) = dirs::data_local_dir() {
+            let local = app_data.join("Muse_Generator").join("ffmpeg").join(&exe_name);
+            if local.exists() {
+                return local;
+            }
         }
         if let Some(p) = first_working_windows_ffmpeg_from_where() {
             return p;

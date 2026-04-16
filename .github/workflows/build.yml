@@ -39,8 +39,20 @@ jobs:
       - name: Install npm dependencies
         run: npm install
 
-      - name: Build Tauri app
-        run: npm run tauri build -- --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - name: Fetch FFmpeg for Windows bundle
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: bash scripts/fetch-ffmpeg-windows.sh
+
+      - name: Build Tauri app (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.windows.bundle.json
+        env:
+          CARGO_INCREMENTAL: 0
+
+      - name: Build Tauri app (macOS)
+        if: matrix.platform == 'macos-latest'
+        run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
         env:
           CARGO_INCREMENTAL: 0
 

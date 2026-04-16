@@ -33,7 +33,12 @@ fn unique_seed() -> u32 {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .setup(|_app| Ok(()))
+        .setup(|app| {
+            if std::env::consts::OS == "windows" {
+                let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app.handle());
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
@@ -53,8 +58,15 @@ fn main() {
 }
 
 #[tauri::command]
-fn check_ffmpeg() -> String {
+fn check_ffmpeg(app: tauri::AppHandle) -> String {
     let os = std::env::consts::OS;
+
+    if os == "windows" {
+        let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app);
+        if ffmpeg::bundled_resource_ffmpeg_exists(&app) {
+            return "found".to_string();
+        }
+    }
 
     // On macOS, try to use the system "which" command to find FFmpeg
     // This uses the same PATH as the terminal
@@ -149,9 +161,41 @@ fn check_ffmpeg() -> String {
 fn get_config(app: tauri::AppHandle) -> AppConfig {
     config::load_config(&app)
 }
+fn windows_ffmpeg_zip_url_candidates() -> Vec<String> {
+    if let Ok(u) = std::env::var("MUSE_FFMPEG_WINDOWS_ZIP_URL") {
+        let u = u.trim();
+        if !u.is_empty() {
+            return vec![u.to_string()];
+        }
+    }
+    vec![
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip".to_string(),
+        // Fallback for regions where GitHub is slow (may change over time; override with env above).
+        "https://mirror.ghproxy.com/https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip".to_string(),
+    ]
+}
+
+async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let response = reqwest::get(url)
+        .await
+        .map_err(|e| format!("{}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}", response.status()));
+    }
+    response
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("Failed to read response: {}", e))
+}
+
 #[tauri::command]
-async fn download_ffmpeg() -> Result<String, String> {
+async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
     let os = std::env::consts::OS;
+
+    if os == "windows" {
+        let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app);
+    }
 
     // First check if a valid FFmpeg already exists
     let existing_path = ffmpeg::get_ffmpeg_path();
@@ -182,17 +226,13 @@ async fn download_ffmpeg() -> Result<String, String> {
         }
     }
 
-    // No valid FFmpeg found, need to download
-    let (url, exe_name) = match os {
-        "windows" => (
-            "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
-            "ffmpeg.exe",
-        ),
-        "macos" => (
-            "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip",
-            "ffmpeg",
-        ),
-        _ => return Err(format!("Unsupported OS: {}", os)),
+    // No valid FFmpeg found, need to download (or no bundled resource in installer)
+    let exe_name = if os == "windows" {
+        "ffmpeg.exe"
+    } else if os == "macos" {
+        "ffmpeg"
+    } else {
+        return Err(format!("Unsupported OS: {}", os));
     };
 
     // Create download directory
@@ -209,18 +249,34 @@ async fn download_ffmpeg() -> Result<String, String> {
     std::fs::create_dir_all(&download_dir)
         .map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    // Download
-    let response = reqwest::get(url)
-        .await
-        .map_err(|e| format!("Failed to download FFmpeg: {}", e))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Download failed with status: {}", response.status()));
-    }
-
-    let bytes = response.bytes()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
+    let bytes: Vec<u8> = if os == "windows" {
+        let urls = windows_ffmpeg_zip_url_candidates();
+        let mut last_err = String::new();
+        let mut got: Option<Vec<u8>> = None;
+        for url in &urls {
+            match fetch_url_bytes(url).await {
+                Ok(b) => {
+                    got = Some(b);
+                    break;
+                }
+                Err(e) => {
+                    last_err = format!("{} — {}", url, e);
+                }
+            }
+        }
+        got.ok_or_else(|| {
+            format!(
+                "Failed to download FFmpeg (tried {} URL(s)). Last error: {}",
+                urls.len(),
+                last_err
+            )
+        })?
+    } else {
+        let url = "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip";
+        fetch_url_bytes(url)
+            .await
+            .map_err(|e| format!("Failed to download FFmpeg: {}", e))?
+    };
 
     // Extract based on OS
     if os == "windows" {

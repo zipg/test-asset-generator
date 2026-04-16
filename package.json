@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build:win": "npm run build && bash scripts/fetch-ffmpeg-windows.sh && npm run tauri -- build --config src-tauri/tauri.windows.bundle.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
