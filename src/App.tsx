@@ -83,7 +83,10 @@ export default function App() {
     setImageResult(null);
     setProgress(null);
     try {
-      await downloadFFmpeg();
+      const downloadResult = await downloadFFmpeg();
+      if (!downloadResult.success) {
+        throw new Error("FFmpeg 下载失败: " + downloadResult.message);
+      }
       const res = await generateImages(
         config.imageConfig as unknown as Record<string, unknown>,
         config.savePath
@@ -102,7 +105,10 @@ export default function App() {
     setAudioResult(null);
     setProgress(null);
     try {
-      await downloadFFmpeg();
+      const downloadResult = await downloadFFmpeg();
+      if (!downloadResult.success) {
+        throw new Error("FFmpeg 下载失败: " + downloadResult.message);
+      }
       const res = await generateAudio(
         config.audioConfig as unknown as Record<string, unknown>,
         config.savePath
@@ -121,7 +127,10 @@ export default function App() {
     setVideoResult(null);
     setProgress(null);
     try {
-      await downloadFFmpeg();
+      const downloadResult = await downloadFFmpeg();
+      if (!downloadResult.success) {
+        throw new Error("FFmpeg 下载失败: " + downloadResult.message);
+      }
       const res = await generateVideos(
         config.videoConfig as unknown as Record<string, unknown>,
         config.savePath
