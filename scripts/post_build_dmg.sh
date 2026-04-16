@@ -2,7 +2,7 @@
 # Post-build DMG customization script
 # Usage: ./post_build_dmg.sh <path_to_dmg>
 #
-# This script adds fix_permissions.command to the DMG
+# This script adds a README file to the DMG
 
 set -e
 
@@ -18,35 +18,25 @@ if [ "$(uname)" != "Darwin" ]; then
     exit 1
 fi
 
-echo "Adding fix_permissions.command to DMG: $DMG_PATH"
+echo "Adding README to DMG: $DMG_PATH"
 
 # Create temp directory
 WORK_DIR=$(mktemp -d)
 MOUNT_POINT="$WORK_DIR/volume"
 RW_DMG="$WORK_DIR/rw.dmg"
 
-# Create the fix_permissions.command script
-cat > "$WORK_DIR/fix_permissions.command" << 'EOF'
-#!/bin/bash
-set -e
+# Create the README file
+cat > "$WORK_DIR/首次运行前请先看我.txt" << 'EOF'
+首次运行前请先看我
+====================
 
-APP_NAME="Muse_Generator.app"
-VOLUME_PATH="$(dirname "$(dirname "$0")")"
-APP_PATH="$VOLUME_PATH/$APP_NAME"
+如果 App 复制到 Applications 后无法启动（提示"无法打开"），
+请在终端运行以下命令：
 
-if [ ! -d "$APP_PATH" ]; then
-    echo "Error: $APP_NAME not found. Please copy the app first."
-    exit 1
-fi
+    xattr -cr /Applications/Muse_Generator.app
 
-echo "Fixing permissions for $APP_NAME..."
-xattr -cr "$APP_PATH"
-echo "Done! You can now run the app."
-echo ""
-read -p "按回车键关闭..."
+然后重新双击打开 App 即可正常运行。
 EOF
-
-chmod +x "$WORK_DIR/fix_permissions.command"
 
 # Convert DMG to read-write
 echo "Converting to read-write..."
@@ -56,8 +46,8 @@ hdiutil convert "$DMG_PATH" -format UDRW -o "$RW_DMG" 2>/dev/null
 echo "Mounting DMG..."
 hdiutil attach "$RW_DMG" -mountpoint "$MOUNT_POINT" -nobrowse 2>/dev/null
 
-# Copy the script to DMG volume
-cp "$WORK_DIR/fix_permissions.command" "$MOUNT_POINT/"
+# Copy the README to DMG volume
+cp "$WORK_DIR/首次运行前请先看我.txt" "$MOUNT_POINT/"
 
 # Unmount
 echo "Unmounting DMG..."
@@ -74,4 +64,4 @@ mv "$NEW_DMG" "$DMG_PATH"
 # Clean up
 rm -rf "$WORK_DIR"
 
-echo "Done! fix_permissions.command has been added to the DMG."
+echo "Done! README has been added to the DMG."
