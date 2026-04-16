@@ -44,7 +44,7 @@ jobs:
         env:
           CARGO_INCREMENTAL: 0
 
-      - name: Add fix_permissions.command to macOS DMG
+      - name: Add README to macOS DMG
         if: matrix.platform == 'macos-latest'
         run: |
           DMG_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" | head -1)

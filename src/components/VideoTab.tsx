@@ -8,6 +8,7 @@ interface Props {
   onGenerate: () => void;
   onEstimate: (cfg: Record<string, unknown>) => Promise<string>;
   generating: boolean;
+  disabled?: boolean;
 }
 
 const FORMAT_OPTIONS: VideoFormat[] = ["MP4", "MOV", "WEBM"];
@@ -32,6 +33,7 @@ export default function VideoTab({
   onGenerate,
   onEstimate,
   generating,
+  disabled = false,
 }: Props) {
   const [estimate, setEstimate] = useState("");
   const [lockAspect, setLockAspect] = useState(true);
@@ -81,7 +83,7 @@ export default function VideoTab({
         <select
           value={config.format}
           onChange={(e) => onConfigChange({ format: e.target.value as VideoFormat })}
-          disabled={generating}
+          disabled={disabled || generating}
         >
           {FORMAT_OPTIONS.map((f) => (
             <option key={f} value={f}>{f}</option>
@@ -93,7 +95,7 @@ export default function VideoTab({
         <select
           value={config.codec}
           onChange={(e) => onConfigChange({ codec: e.target.value as Codec })}
-          disabled={generating}
+          disabled={disabled || generating}
         >
           {CODEC_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -108,7 +110,7 @@ export default function VideoTab({
             value={config.width}
             min={1}
             onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
-            disabled={generating}
+            disabled={disabled || generating}
           />
           <span>x</span>
           <input
@@ -116,14 +118,14 @@ export default function VideoTab({
             value={config.height}
             min={1}
             onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
-            disabled={generating}
+            disabled={disabled || generating}
           />
           <label className="checkbox-label">
             <input
               type="checkbox"
               checked={lockAspect}
               onChange={(e) => setLockAspect(e.target.checked)}
-              disabled={generating}
+              disabled={disabled || generating}
             />
             锁定9:16
           </label>
@@ -134,7 +136,7 @@ export default function VideoTab({
         <select
           value={config.fps}
           onChange={(e) => onConfigChange({ fps: parseInt(e.target.value) })}
-          disabled={generating}
+          disabled={disabled || generating}
         >
           {FPS_OPTIONS.map((f) => (
             <option key={f} value={f}>{f} fps</option>
@@ -148,7 +150,7 @@ export default function VideoTab({
           value={config.duration}
           min={1}
           onChange={(e) => onConfigChange({ duration: parseFloat(e.target.value) || 1 })}
-          disabled={generating}
+          disabled={disabled || generating}
         />
       </div>
       <div className="form-row">
@@ -156,7 +158,7 @@ export default function VideoTab({
         <select
           value={config.contentType}
           onChange={(e) => onConfigChange({ contentType: e.target.value as ContentType })}
-          disabled={generating}
+          disabled={disabled || generating}
         >
           {CONTENT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -170,7 +172,7 @@ export default function VideoTab({
           value={config.count}
           min={1}
           onChange={(e) => onConfigChange({ count: parseInt(e.target.value) || 1 })}
-          disabled={generating}
+          disabled={disabled || generating}
         />
       </div>
       <div className="form-row">
@@ -179,7 +181,7 @@ export default function VideoTab({
           type="text"
           value={config.prefix}
           onChange={(e) => onConfigChange({ prefix: e.target.value })}
-          disabled={generating}
+          disabled={disabled || generating}
         />
       </div>
       <div className="estimate-row">
@@ -189,7 +191,7 @@ export default function VideoTab({
       <button
         className="btn-primary"
         onClick={handleStart}
-        disabled={generating}
+        disabled={disabled || generating}
       >
         {generating ? "生成中..." : "开始生成"}
       </button>

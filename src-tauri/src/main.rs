@@ -358,7 +358,7 @@ async fn generate_images(
 
             args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg(&args) {
+            match ffmpeg::run_ffmpeg(&args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
@@ -486,7 +486,7 @@ async fn generate_audio(
 
             args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg(&args) {
+            match ffmpeg::run_ffmpeg(&args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
@@ -637,7 +637,7 @@ async fn generate_videos(
                 output_path.to_str().unwrap().to_string(),
             ];
 
-            match ffmpeg::run_ffmpeg(&args) {
+            match ffmpeg::run_ffmpeg(&args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
