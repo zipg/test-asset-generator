@@ -135,6 +135,13 @@ fn check_ffmpeg() -> String {
         }
     }
 
+    // Windows: typical users have no FFmpeg preinstalled; `download_ffmpeg` installs to AppData
+    // on first generate. If we returned `not_found` here, `ffmpegReady` stays false and the UI
+    // disables all actions — users could never click Generate to trigger the download (deadlock).
+    if os == "windows" && dirs::data_local_dir().is_some() {
+        return "found".to_string();
+    }
+
     "not_found".to_string()
 }
 

@@ -156,7 +156,7 @@ export default function App() {
       <TabBar active={activeTab} onChange={handleTabChange} disabled={isDisabled} />
       {!ffmpegReady && (
         <div className="ffmpeg-warning">
-          ⚠️ FFmpeg 未找到，请运行 <code>brew install ffmpeg</code> 安装
+          ⚠️ 未检测到可用的 FFmpeg。macOS 可安装 Homebrew 后执行 <code>brew install ffmpeg</code>；Windows 需可写入用户目录且联网，以便首次生成时自动下载。
         </div>
       )}
       <div className="tab-content">
