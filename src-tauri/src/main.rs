@@ -8,6 +8,12 @@ use config::AppConfig;
 use generator::{get_cancel, reset_cancel, set_cancel, random_hex};
 use rand::Rng;
 use tauri::Emitter;
+/// Compute MD5 hash of a file
+fn file_md5(path: &std::path::Path) -> Result<String, String> {
+    let data = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let hash = md5::compute(&data);
+    Ok(hex::encode(*hash))
+}
 
 /// Generate a truly unique seed using nanosecond precision timestamp + loop counter
 /// This ensures no two calls within the same process will ever produce the same seed
@@ -52,20 +58,6 @@ fn get_config(app: tauri::AppHandle) -> AppConfig {
 #[tauri::command]
 async fn download_ffmpeg() -> Result<String, String> {
     let os = std::env::consts::OS;
-
-    // Detect system architecture
-    let arch = if os == "macos" {
-        let output = std::process::Command::new("uname").arg("-m").output();
-        match output {
-            Ok(o) => {
-                let arch_str = String::from_utf8_lossy(&o.stdout).trim().to_string();
-                if arch_str == "arm64" { "arm64" } else { "x86_64" }
-            },
-            Err(_) => "x86_64",
-        }
-    } else {
-        "x86_64"
-    };
 
     let (url, exe_name) = match os {
         "windows" => (
@@ -253,44 +245,89 @@ async fn generate_images(
     let mut failed = 0u32;
     let mut errors: Vec<serde_json::Value> = Vec::new();
 
+    let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     for i in 1..=total {
         if get_cancel() {
             break;
         }
 
-        let random_str = random_hex(6);
-        let ext = match config.format.as_str() {
-            "JPG" | "jpg" => "jpg",
-            "WEBP" | "webp" => "webp",
-            _ => "png",
-        };
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
-        let output_path = output_dir.join(&filename);
-        let seed: u32 = unique_seed();
+        // Try generating until we get a unique MD5 or max retries
+        let mut retries = 0;
+        let max_retries = 10;
+        let mut generated = false;
 
-        let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
+        while retries < max_retries {
+            if get_cancel() {
+                break;
+            }
 
-        let mut args: Vec<String> = vec![
-            "-f".to_string(), "lavfi".to_string(),
-            "-i".to_string(), filter,
-            "-vframes".to_string(), "1".to_string(),
-            "-y".to_string(),
-        ];
+            let random_str = random_hex(6);
+            let ext = match config.format.as_str() {
+                "JPG" | "jpg" => "jpg",
+                "WEBP" | "webp" => "webp",
+                _ => "png",
+            };
+            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let output_path = output_dir.join(&filename);
+            let seed: u32 = unique_seed();
 
-        match ext {
-            "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
-            "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
-            _ => {}
+            let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
+
+            let mut args: Vec<String> = vec![
+                "-f".to_string(), "lavfi".to_string(),
+                "-i".to_string(), filter,
+                "-vframes".to_string(), "1".to_string(),
+                "-y".to_string(),
+            ];
+
+            match ext {
+                "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+                "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                _ => {}
+            }
+
+            args.push(output_path.to_str().unwrap().to_string());
+
+            match ffmpeg::run_ffmpeg(&args) {
+                Ok(_) => {
+                    // Check MD5 for uniqueness
+                    match file_md5(&output_path) {
+                        Ok(md5_hash) => {
+                            if seen_md5s.contains(&md5_hash) {
+                                // Duplicate MD5, retry with new seed
+                                retries += 1;
+                                let _ = std::fs::remove_file(&output_path);
+                                continue;
+                            }
+                            seen_md5s.insert(md5_hash);
+                            generated = true;
+                            break;
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
+                            generated = true;
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    errors.push(serde_json::json!({ "file": filename, "error": e }));
+                    generated = true;
+                    break;
+                }
+            }
         }
 
-        args.push(output_path.to_str().unwrap().to_string());
+        if !generated && retries >= max_retries {
+            failed += 1;
+            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+        }
 
-        match ffmpeg::run_ffmpeg(&args) {
-            Ok(_) => success += 1,
-            Err(e) => {
-                failed += 1;
-                errors.push(serde_json::json!({ "file": filename, "error": e }));
-            }
+        if generated {
+            success += 1;
         }
 
         let elapsed = i as f64;
@@ -304,7 +341,7 @@ async fn generate_images(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": filename,
+            "currentFile": format!("{}_{:03}", config.prefix, i),
             "estimatedRemainingSecs": eta,
         }));
     }
@@ -338,42 +375,87 @@ async fn generate_audio(
     };
     let duration_str = format_duration(config.duration);
 
+    let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     for i in 1..=total {
         if get_cancel() {
             break;
         }
 
-        let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
-        let output_path = output_dir.join(&filename);
+        // Try generating until we get a unique MD5 or max retries
+        let mut retries = 0;
+        let max_retries = 10;
+        let mut generated = false;
 
-        let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
-        let seed: u32 = unique_seed();
+        while retries < max_retries {
+            if get_cancel() {
+                break;
+            }
 
-        let anoisesa = format!(
-            "anoisesa=d={}:a={}:r={}:c={}:s={}",
-            duration_str, amplitude, config.sample_rate, channels, seed
-        );
+            let random_str = random_hex(6);
+            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let output_path = output_dir.join(&filename);
 
-        let mut args: Vec<String> = vec![
-            "-f".to_string(), "lavfi".to_string(),
-            "-i".to_string(), anoisesa,
-            "-y".to_string(),
-        ];
+            let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
+            let seed: u32 = unique_seed();
 
-        if ext != "wav" {
-            let codec = if ext == "aac" { "aac" } else { "mp3" };
-            args.extend_from_slice(&["-acodec".to_string(), codec.to_string()]);
+            let anoisesa = format!(
+                "anoisesa=d={}:a={}:r={}:c={}:s={}",
+                duration_str, amplitude, config.sample_rate, channels, seed
+            );
+
+            let mut args: Vec<String> = vec![
+                "-f".to_string(), "lavfi".to_string(),
+                "-i".to_string(), anoisesa,
+                "-y".to_string(),
+            ];
+
+            if ext != "wav" {
+                let codec = if ext == "aac" { "aac" } else { "mp3" };
+                args.extend_from_slice(&["-acodec".to_string(), codec.to_string()]);
+            }
+
+            args.push(output_path.to_str().unwrap().to_string());
+
+            match ffmpeg::run_ffmpeg(&args) {
+                Ok(_) => {
+                    // Check MD5 for uniqueness
+                    match file_md5(&output_path) {
+                        Ok(md5_hash) => {
+                            if seen_md5s.contains(&md5_hash) {
+                                // Duplicate MD5, retry with new seed
+                                retries += 1;
+                                let _ = std::fs::remove_file(&output_path);
+                                continue;
+                            }
+                            seen_md5s.insert(md5_hash);
+                            generated = true;
+                            break;
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
+                            generated = true;
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    errors.push(serde_json::json!({ "file": filename, "error": e }));
+                    generated = true;
+                    break;
+                }
+            }
         }
 
-        args.push(output_path.to_str().unwrap().to_string());
+        if !generated && retries >= max_retries {
+            failed += 1;
+            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+        }
 
-        match ffmpeg::run_ffmpeg(&args) {
-            Ok(_) => success += 1,
-            Err(e) => {
-                failed += 1;
-                errors.push(serde_json::json!({ "file": filename, "error": e }));
-            }
+        if generated {
+            success += 1;
         }
 
         let elapsed = i as f64;
@@ -387,7 +469,7 @@ async fn generate_audio(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": filename,
+            "currentFile": format!("{}_{:03}", config.prefix, i),
             "estimatedRemainingSecs": eta,
         }));
     }
@@ -421,64 +503,109 @@ async fn generate_videos(
     let codec = if config.codec == "h264" { "libx264" } else { "libx265" };
     let duration_str = format_duration(config.duration);
 
+    let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
+
     for i in 1..=total {
         if get_cancel() {
             break;
         }
 
-        let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
-        let output_path = output_dir.join(&filename);
+        // Try generating until we get a unique MD5 or max retries
+        let mut retries = 0;
+        let max_retries = 10;
+        let mut generated = false;
 
-        let seed: u32 = unique_seed();
-
-        let filter = match config.content_type.as_str() {
-            "solid" => {
-                // Use seed to ensure unique colors
-                let color_hue = (seed % 360) as f32;
-                format!(
-                    "color=c=0x{:06x}:s={}x{}:d={}",
-                    (color_hue / 360.0 * 16777215.0) as u32,
-                    config.width, config.height, duration_str
-                )
+        while retries < max_retries {
+            if get_cancel() {
+                break;
             }
-            "gradient" => format!(
-                "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}",
-                config.width, config.height, seed, duration_str
-            ),
-            "pattern" => format!(
-                "testsrc2=size={}x{}",
-                config.width, config.height
-            ),
-            _ => {
-                // Use different cellauto rules to ensure unique output since pattern=random is deterministic
-                let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
-                let rule = rules[(seed % rules.len() as u32) as usize];
-                format!(
-                    "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
-                    rule, seed, config.width, config.height, config.width, config.height
-                )
-            },
-        };
 
-        let fps_str = config.fps.to_string();
-        let args: Vec<String> = vec![
-            "-f".to_string(), "lavfi".to_string(),
-            "-i".to_string(), filter,
-            "-c:v".to_string(), codec.to_string(),
-            "-r".to_string(), fps_str,
-            "-t".to_string(), duration_str.clone(),
-            "-pix_fmt".to_string(), "yuv420p".to_string(),
-            "-y".to_string(),
-            output_path.to_str().unwrap().to_string(),
-        ];
+            let random_str = random_hex(6);
+            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let output_path = output_dir.join(&filename);
 
-        match ffmpeg::run_ffmpeg(&args) {
-            Ok(_) => success += 1,
-            Err(e) => {
-                failed += 1;
-                errors.push(serde_json::json!({ "file": filename, "error": e }));
+            let seed: u32 = unique_seed();
+
+            let filter = match config.content_type.as_str() {
+                "solid" => {
+                    // Use seed to ensure unique colors
+                    let color_hue = (seed % 360) as f32;
+                    format!(
+                        "color=c=0x{:06x}:s={}x{}:d={}",
+                        (color_hue / 360.0 * 16777215.0) as u32,
+                        config.width, config.height, duration_str
+                    )
+                }
+                "gradient" => format!(
+                    "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}",
+                    config.width, config.height, seed, duration_str
+                ),
+                "pattern" => format!(
+                    "testsrc2=size={}x{}",
+                    config.width, config.height
+                ),
+                _ => {
+                    // Use different cellauto rules to ensure unique output since pattern=random is deterministic
+                    let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
+                    let rule = rules[(seed % rules.len() as u32) as usize];
+                    format!(
+                        "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
+                        rule, seed, config.width, config.height, config.width, config.height
+                    )
+                },
+            };
+
+            let fps_str = config.fps.to_string();
+            let args: Vec<String> = vec![
+                "-f".to_string(), "lavfi".to_string(),
+                "-i".to_string(), filter,
+                "-c:v".to_string(), codec.to_string(),
+                "-r".to_string(), fps_str,
+                "-t".to_string(), duration_str.clone(),
+                "-pix_fmt".to_string(), "yuv420p".to_string(),
+                "-y".to_string(),
+                output_path.to_str().unwrap().to_string(),
+            ];
+
+            match ffmpeg::run_ffmpeg(&args) {
+                Ok(_) => {
+                    // Check MD5 for uniqueness
+                    match file_md5(&output_path) {
+                        Ok(md5_hash) => {
+                            if seen_md5s.contains(&md5_hash) {
+                                // Duplicate MD5, retry with new seed
+                                retries += 1;
+                                let _ = std::fs::remove_file(&output_path);
+                                continue;
+                            }
+                            seen_md5s.insert(md5_hash);
+                            generated = true;
+                            break;
+                        }
+                        Err(e) => {
+                            failed += 1;
+                            errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
+                            generated = true;
+                            break;
+                        }
+                    }
+                }
+                Err(e) => {
+                    failed += 1;
+                    errors.push(serde_json::json!({ "file": filename, "error": e }));
+                    generated = true;
+                    break;
+                }
             }
+        }
+
+        if !generated && retries >= max_retries {
+            failed += 1;
+            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+        }
+
+        if generated {
+            success += 1;
         }
 
         let elapsed = i as f64;
@@ -492,7 +619,7 @@ async fn generate_videos(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": filename,
+            "currentFile": format!("{}_{:03}", config.prefix, i),
             "estimatedRemainingSecs": eta,
         }));
     }
