@@ -12,8 +12,14 @@ export function useGenerator() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [ffmpegReady, setFfmpegReady] = useState(true);
 
   useEffect(() => {
+    // Check FFmpeg status at startup
+    invoke<string>("check_ffmpeg").then((status) => {
+      setFfmpegReady(status === "found");
+    }).catch(() => setFfmpegReady(false));
+
     invoke<AppConfig>("get_config")
       .then((cfg) => {
         // Randomize content type on startup for all media types
@@ -126,6 +132,7 @@ export function useGenerator() {
     updateConfig,
     loading,
     downloading,
+    ffmpegReady,
     estimateSize,
     selectPath,
     downloadFFmpeg,

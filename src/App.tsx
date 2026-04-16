@@ -23,6 +23,7 @@ export default function App() {
     updateConfig,
     estimateSize,
     downloading,
+    ffmpegReady,
     downloadFFmpeg,
     generateImages,
     generateAudio,
@@ -153,6 +154,11 @@ export default function App() {
     <div className="app-container">
       <Header savePath={config.savePath ?? undefined} onPathChange={handlePathChange} />
       <TabBar active={activeTab} onChange={handleTabChange} disabled={isDisabled} />
+      {!ffmpegReady && (
+        <div className="ffmpeg-warning">
+          ⚠️ FFmpeg 未找到，请运行 <code>brew install ffmpeg</code> 安装
+        </div>
+      )}
       <div className="tab-content">
         {activeTab === "video" && (
           <VideoTab

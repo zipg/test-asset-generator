@@ -46,9 +46,19 @@ fn main() {
             select_save_path,
             estimate_size,
             download_ffmpeg,
+            check_ffmpeg,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn check_ffmpeg() -> String {
+    let path = ffmpeg::get_ffmpeg_path();
+    match std::process::Command::new(&path).arg("--version").output() {
+        Ok(output) if output.status.success() => "found".to_string(),
+        _ => "not_found".to_string(),
+    }
 }
 
 #[tauri::command]
@@ -59,6 +69,15 @@ fn get_config(app: tauri::AppHandle) -> AppConfig {
 async fn download_ffmpeg() -> Result<String, String> {
     let os = std::env::consts::OS;
 
+    // First check if a valid FFmpeg already exists
+    let existing_path = ffmpeg::get_ffmpeg_path();
+    if let Ok(output) = std::process::Command::new(&existing_path).arg("--version").output() {
+        if output.status.success() {
+            return Ok("already_exists".to_string());
+        }
+    }
+
+    // No valid FFmpeg found, need to download
     let (url, exe_name) = match os {
         "windows" => (
             "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip",
@@ -77,17 +96,9 @@ async fn download_ffmpeg() -> Result<String, String> {
 
     let ffmpeg_path = download_dir.join(exe_name);
 
-    // Check if already downloaded and executable
+    // Clean up any invalid existing download
     if ffmpeg_path.exists() {
-        match std::process::Command::new(&ffmpeg_path).arg("--version").output() {
-            Ok(output) if output.status.success() => {
-                return Ok("already_exists".to_string());
-            }
-            _ => {
-                // Invalid or incompatible binary, remove it
-                let _ = std::fs::remove_file(&ffmpeg_path);
-            }
-        }
+        let _ = std::fs::remove_file(&ffmpeg_path);
     }
 
     std::fs::create_dir_all(&download_dir)

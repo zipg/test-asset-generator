@@ -32,6 +32,21 @@ body {
   padding: 20px 24px 16px;
 }
 
+.ffmpeg-warning {
+  background: #fff3cd;
+  color: #856404;
+  padding: 10px 20px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.ffmpeg-warning code {
+  background: #ffeeba;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .header h1 {
   font-size: 18px;
   font-weight: 600;
