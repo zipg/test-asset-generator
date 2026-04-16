@@ -399,14 +399,14 @@ async fn generate_audio(
             let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
             let seed: u32 = unique_seed();
 
-            let anoisesa = format!(
-                "anoisesa=d={}:a={}:r={}:c={}:s={}",
+            let anoisesrc = format!(
+                "anoisesrc=d={}:a={}:r={}:c={}:s={}",
                 duration_str, amplitude, config.sample_rate, channels, seed
             );
 
             let mut args: Vec<String> = vec![
                 "-f".to_string(), "lavfi".to_string(),
-                "-i".to_string(), anoisesa,
+                "-i".to_string(), anoisesrc,
                 "-y".to_string(),
             ];
 
@@ -545,12 +545,13 @@ async fn generate_videos(
                     config.width, config.height
                 ),
                 _ => {
-                    // Use different cellauto rules to ensure unique output since pattern=random is deterministic
+                    // Use random_fill_ratio to ensure unique output - pattern=random ignores seed
                     let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
                     let rule = rules[(seed % rules.len() as u32) as usize];
+                    let fill_ratio = 0.3 + (seed % 50) as f64 / 100.0;
                     format!(
-                        "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
-                        rule, seed, config.width, config.height, config.width, config.height
+                        "cellauto=rule={}:size={}x{}:random_seed={}:random_fill_ratio={},scale={}:{}:flags=neighbor",
+                        rule, config.width, config.height, seed, fill_ratio, config.width, config.height
                     )
                 },
             };
@@ -672,12 +673,14 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
         ),
         "pattern" => format!("testsrc2=size={}x{}", width, height),
         _ => {
-            // Use different cellauto rules to ensure unique output since pattern=random is deterministic
+            // Use random_fill_ratio to ensure unique output - pattern=random ignores seed
+            // but random_fill_ratio + random_seed together produce truly unique outputs
             let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
             let rule = rules[(seed % rules.len() as u32) as usize];
+            let fill_ratio = 0.3 + (seed % 50) as f64 / 100.0; // range 0.30 to 0.79
             format!(
-                "cellauto=rule={}:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor",
-                rule, seed, width, height, width, height
+                "cellauto=rule={}:size={}x{}:random_seed={}:random_fill_ratio={},scale={}:{}:flags=neighbor",
+                rule, width, height, seed, fill_ratio, width, height
             )
         }
     }

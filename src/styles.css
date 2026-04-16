@@ -84,13 +84,13 @@ body {
 .btn-primary {
   display: block;
   width: 100%;
-  margin-top: 16px;
+  margin-top: 12px;
   background: #0071e3;
   color: #ffffff;
   border: none;
   border-radius: 8px;
-  padding: 12px 20px;
-  font-size: 15px;
+  padding: 10px 20px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -153,25 +153,25 @@ body {
 
 /* Tab Content */
 .tab-content {
-  padding: 20px 24px;
+  padding: 16px 20px;
 }
 
 /* Tab Panel */
 .tab-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 /* Form Rows */
 .form-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .form-row label {
-  flex: 0 0 80px;
+  flex: 0 0 68px;
   font-size: 13px;
   color: #3d3d3f;
   font-weight: 500;
@@ -183,7 +183,7 @@ body {
   min-width: 0;
   border: 1px solid #d1d1d6;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
@@ -199,7 +199,7 @@ body {
   min-width: 0;
   border: 1px solid #d1d1d6;
   border-radius: 6px;
-  padding: 6px 10px;
+  padding: 5px 8px;
   font-size: 13px;
   outline: none;
   background: #ffffff;
@@ -216,15 +216,15 @@ body {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .resolution-row input {
-  width: 80px;
+  width: 72px;
   text-align: center;
   border: 1px solid #d1d1d6;
   border-radius: 6px;
-  padding: 6px 8px;
+  padding: 5px 6px;
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
@@ -245,9 +245,8 @@ body {
   justify-content: space-between;
   font-size: 12px;
   color: #86868b;
-  padding: 6px 0;
-  border-top: 1px solid #f0f0f0;
-  margin-top: 4px;
+  padding: 4px 0;
+  margin-top: 2px;
 }
 
 /* Progress Panel */
@@ -340,4 +339,21 @@ body {
 .error-item strong {
   font-weight: 600;
   color: #c0392b;
+}
+
+.error-section {
+  margin-top: 10px;
+}
+
+.error-toggle {
+  background: none;
+  border: none;
+  color: #0071e3;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.error-toggle:hover {
+  text-decoration: underline;
 }
