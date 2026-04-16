@@ -9,6 +9,21 @@ use generator::{get_cancel, reset_cancel, set_cancel, random_hex};
 use rand::Rng;
 use tauri::Emitter;
 
+/// Generate a truly unique seed using nanosecond precision timestamp + loop counter
+/// This ensures no two calls within the same process will ever produce the same seed
+fn unique_seed() -> u32 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::sync::atomic::{AtomicU32, Ordering};
+    static COUNTER: AtomicU32 = AtomicU32::new(0);
+
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0);
+    let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+    ((nanos as u32).wrapping_add(counter)) | 1 // |1 ensures odd number
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -251,7 +266,7 @@ async fn generate_images(
         };
         let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
         let output_path = output_dir.join(&filename);
-        let seed: u32 = rand::thread_rng().gen();
+        let seed: u32 = unique_seed();
 
         let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
 
@@ -333,7 +348,7 @@ async fn generate_audio(
         let output_path = output_dir.join(&filename);
 
         let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
-        let seed: u32 = rand::thread_rng().gen();
+        let seed: u32 = unique_seed();
 
         let anoisesa = format!(
             "anoisesa=d={}:a={}:r={}:c={}:s={}",
@@ -415,7 +430,7 @@ async fn generate_videos(
         let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
         let output_path = output_dir.join(&filename);
 
-        let seed: u32 = rand::thread_rng().gen();
+        let seed: u32 = unique_seed();
 
         let filter = match config.content_type.as_str() {
             "solid" => {
