@@ -54,11 +54,57 @@ fn main() {
 
 #[tauri::command]
 fn check_ffmpeg() -> String {
-    let path = ffmpeg::get_ffmpeg_path();
-    match std::process::Command::new(&path).arg("--version").output() {
-        Ok(output) if output.status.success() => "found".to_string(),
-        _ => "not_found".to_string(),
+    // Try all possible FFmpeg locations
+    let os = std::env::consts::OS;
+    let exe_name = if os == "windows" { "ffmpeg.exe" } else { "ffmpeg" };
+
+    // Homebrew paths for macOS
+    if os == "macos" {
+        let homebrew_paths = [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
+            "/usr/local/opt/ffmpeg/bin/ffmpeg",
+        ];
+        for path in &homebrew_paths {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                if let Ok(output) = std::process::Command::new(p).arg("--version").output() {
+                    if output.status.success() {
+                        return "found".to_string();
+                    }
+                }
+            }
+        }
     }
+
+    // App data directory
+    if let Some(app_data) = dirs::data_local_dir() {
+        let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
+        if downloaded.exists() {
+            if let Ok(output) = std::process::Command::new(&downloaded).arg("--version").output() {
+                if output.status.success() {
+                    return "found".to_string();
+                }
+            }
+        }
+    }
+
+    // System PATH
+    if let Ok(path_var) = std::env::var("PATH") {
+        for path_dir in path_var.split(std::path::MAIN_SEPARATOR) {
+            let from_path = std::path::Path::new(path_dir).join(exe_name);
+            if from_path.exists() {
+                if let Ok(output) = std::process::Command::new(&from_path).arg("--version").output() {
+                    if output.status.success() {
+                        return "found".to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    "not_found".to_string()
 }
 
 #[tauri::command]

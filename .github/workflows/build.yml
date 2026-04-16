@@ -44,6 +44,15 @@ jobs:
         env:
           CARGO_INCREMENTAL: 0
 
+      - name: Add fix_permissions.command to macOS DMG
+        if: matrix.platform == 'macos-latest'
+        run: |
+          DMG_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" | head -1)
+          if [ -n "$DMG_PATH" ] && [ -f "$DMG_PATH" ]; then
+            chmod +x scripts/post_build_dmg.sh
+            ./scripts/post_build_dmg.sh "$DMG_PATH"
+          fi
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

@@ -148,7 +148,7 @@ export default function App() {
     return <div className="app-container"><div style={{ padding: "24px" }}>加载中...</div></div>;
   }
 
-  const isDisabled = generating || downloading;
+  const isDisabled = generating || downloading || !ffmpegReady;
 
   return (
     <div className="app-container">

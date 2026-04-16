@@ -1,16 +1,12 @@
 #!/bin/bash
-# DMG Post-Processing Script (macOS only)
-# Run this AFTER building, BEFORE distributing the DMG
-#
+# Post-build DMG customization script
 # Usage: ./post_build_dmg.sh <path_to_dmg>
 #
-# This script adds an "Auto Install" app to the DMG contents
+# This script adds fix_permissions.command to the DMG
 
 set -e
 
 DMG_PATH="$1"
-APP_NAME="Muse_Generator"
-SCRIPT_APP_NAME="点我自动安装"
 
 if [ -z "$DMG_PATH" ] || [ ! -f "$DMG_PATH" ]; then
     echo "Usage: $0 <path_to_dmg>"
@@ -22,90 +18,50 @@ if [ "$(uname)" != "Darwin" ]; then
     exit 1
 fi
 
-echo "Processing DMG: $DMG_PATH"
+echo "Adding fix_permissions.command to DMG: $DMG_PATH"
 
-# Create a temporary directory
-MOUNT_POINT="/tmp/dmg_mount_$$"
-mkdir -p "$MOUNT_POINT"
+# Create temp directory
+WORK_DIR=$(mktemp -d)
+MOUNT_POINT="$WORK_DIR/volume"
 
-# Mount DMG read-only
-echo "Mounting DMG..."
-hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_POINT" -readOnly -nobrowse 2>/dev/null
-
-# Create a read-write DMG for modifications
-RW_DMG="/tmp/dmg_rw_$$.dmg"
-echo "Creating writable DMG..."
-hdiutil convert "$DMG_PATH" -format UDRW -o "$RW_DMG" 2>/dev/null
-
-# Detach and remount as read-write
-hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
-echo "Remounting as read-write..."
-hdiutil attach "$RW_DMG" -mountpoint "$MOUNT_POINT" -nobrowse 2>/dev/null
-
-# Create the auto-install app
-echo "Creating auto-install app..."
-SCRIPT_APP="$MOUNT_POINT/$SCRIPT_APP_NAME.app"
-mkdir -p "$SCRIPT_APP/Contents/MacOS"
-mkdir -p "$SCRIPT_APP/Contents/Resources"
-
-cat > "$SCRIPT_APP/Contents/MacOS/run" << 'SCRIPT_EOF'
+# Create the fix_permissions.command script
+cat > "$WORK_DIR/fix_permissions.command" << 'EOF'
 #!/bin/bash
-VOLUME_PATH="$(df "$0" | tail -1 | awk '{print $NF}')"
-APP_NAME="Muse_Generator"
+set -e
 
-# Copy to Applications
-if [ -d "/Applications/${APP_NAME}.app" ]; then
-    rm -rf "/Applications/${APP_NAME}.app"
+APP_NAME="Muse_Generator.app"
+VOLUME_PATH="$(dirname "$(dirname "$0")")"
+APP_PATH="$VOLUME_PATH/$APP_NAME"
+
+if [ ! -d "$APP_PATH" ]; then
+    echo "Error: $APP_NAME not found in the DMG"
+    exit 1
 fi
-cp -R "${VOLUME_PATH}/${APP_NAME}.app" /Applications/
 
-# Remove quarantine
-xattr -cr /Applications/${APP_NAME}.app 2>/dev/null || true
-
-# Ask to launch
-osascript << 'EOF'
-display dialog "安装完成！是否立即启动？" buttons {"启动", "不了"} default button 1 with icon note
-if button returned of result is "启动" then
-    tell application "Muse_Generator" to activate
-end if
-end tell
+echo "Fixing permissions for $APP_NAME..."
+xattr -cr "$APP_PATH"
+echo "Done! You can now run the app."
+echo ""
+read -p "Press Enter to close this window..."
 EOF
-SCRIPT_EOF
-chmod +x "$SCRIPT_APP/Contents/MacOS/run"
 
-cat > "$SCRIPT_APP/Contents/Info.plist" << 'PLIST_EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key><string>run</string>
-    <key>CFBundleIdentifier</key><string>com.muse.generator.autoinstall</string>
-    <key>CFBundleName</key><string>点我自动安装</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-</dict>
-</plist>
-PLIST_EOF
+chmod +x "$WORK_DIR/fix_permissions.command"
 
-# Create README
-cat > "$MOUNT_POINT/README.txt" << 'README_EOF'
-双击 "点我自动安装.app" 即可自动安装
-或手动拖拽到 Applications 文件夹
-README_EOF
+# Mount DMG
+echo "Mounting DMG..."
+hdiutil attach "$DMG_PATH" -mountpoint "$MOUNT_POINT" -nobrowse 2>/dev/null
+
+# Copy the script to DMG volume
+cp "$WORK_DIR/fix_permissions.command" "$MOUNT_POINT/"
 
 # Unmount
-echo "Unmounting..."
+echo "Unmounting DMG..."
 hdiutil detach "$MOUNT_POINT" -force 2>/dev/null || true
-rm -rf "$MOUNT_POINT"
 
-# Convert back to compressed
-echo "Creating final DMG..."
-NEW_DMG="${DMG_PATH%.dmg}_new.dmg"
-hdiutil convert "$RW_DMG" -format UDZO -o "$NEW_DMG" 2>/dev/null
-rm -f "$RW_DMG"
+# Clean up
+rm -rf "$WORK_DIR"
 
-# Replace original
-mv "$NEW_DMG" "$DMG_PATH"
-
-echo "Done! DMG is ready: $DMG_PATH"
+echo "Done! fix_permissions.command has been added to the DMG."
+echo ""
+echo "Note: Users can double-click fix_permissions.command after copying the app"
+echo "to fix the 'cannot be opened' error on macOS."
