@@ -65,11 +65,19 @@ jobs:
             ./scripts/post_build_dmg.sh "$DMG_PATH"
           fi
 
-      - name: Upload artifact
+      - name: Upload artifact (macOS)
+        if: matrix.platform == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/**
-            src-tauri/target/${{ matrix.target }}/release/muse-generator.exe
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
+          retention-days: 14
+
+      # Windows: only the NSIS installer — do not publish the loose exe (bundled FFmpeg is in the installer).
+      - name: Upload artifact (Windows NSIS installer only)
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Muse_Generator-Windows-Setup
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
           retention-days: 14

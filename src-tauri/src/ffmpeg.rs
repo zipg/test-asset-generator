@@ -1,13 +1,15 @@
 use std::env;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::path::BaseDirectory;
 use tauri::Manager;
 
+use crate::process_ext::command;
+
 fn where_ffmpeg_exe_lines() -> Option<String> {
-    let output = Command::new("where.exe").arg("ffmpeg.exe").output().ok()?;
+    let output = command("where.exe").arg("ffmpeg.exe").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -43,7 +45,7 @@ pub fn first_working_windows_ffmpeg_from_where() -> Option<PathBuf> {
         if !pb.exists() {
             continue;
         }
-        if let Ok(o) = Command::new(&pb).arg("--version").output() {
+        if let Ok(o) = command(&pb).arg("--version").output() {
             if o.status.success() {
                 return Some(pb);
             }
@@ -85,7 +87,7 @@ pub fn ensure_windows_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<()
         };
         let dest = dest_dir.join("ffmpeg.exe");
         let need_copy = !dest.exists()
-            || Command::new(&dest)
+            || command(&dest)
                 .arg("--version")
                 .output()
                 .map(|o| !o.status.success())
@@ -149,7 +151,7 @@ pub fn get_ffmpeg_path() -> PathBuf {
     // macOS: match check_ffmpeg resolution — prefer `which` and Homebrew before any
     // previously downloaded copy (avoids a corrupt partial download shadowing brew).
     if os == "macos" {
-        if let Ok(output) = Command::new("/usr/bin/which").arg("ffmpeg").output() {
+        if let Ok(output) = command("/usr/bin/which").arg("ffmpeg").output() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() && path != "ffmpeg not found" {
                 let p = std::path::Path::new(&path);
@@ -206,7 +208,7 @@ pub fn run_ffmpeg(args: &[String], timeout_secs: u64) -> Result<String, String> 
     let ffmpeg_path = get_ffmpeg_path();
     let timeout = Duration::from_secs(timeout_secs);
 
-    let mut child = Command::new(&ffmpeg_path)
+    let mut child = command(&ffmpeg_path)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -3,7 +3,9 @@
 mod config;
 mod ffmpeg;
 mod generator;
+mod process_ext;
 
+use crate::process_ext::command;
 use config::AppConfig;
 use generator::{get_cancel, reset_cancel, set_cancel, random_hex};
 use rand::Rng;
@@ -71,14 +73,14 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
     // On macOS, try to use the system "which" command to find FFmpeg
     // This uses the same PATH as the terminal
     if os == "macos" {
-        if let Ok(output) = std::process::Command::new("/usr/bin/which")
+        if let Ok(output) = command("/usr/bin/which")
             .arg("ffmpeg")
             .output()
         {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() && path != "ffmpeg not found" {
                 // Found it, verify it works
-                if let Ok(verify) = std::process::Command::new(&path).arg("--version").output() {
+                if let Ok(verify) = command(&path).arg("--version").output() {
                     if verify.status.success() {
                         return "found".to_string();
                     }
@@ -90,7 +92,7 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
     // Windows: PATH uses `;` — discovery lives in ffmpeg.rs (`where.exe` + split_paths).
     if os == "windows" {
         if let Some(p) = ffmpeg::bundled_ffmpeg_beside_executable_windows() {
-            if let Ok(verify) = std::process::Command::new(&p).arg("--version").output() {
+            if let Ok(verify) = command(&p).arg("--version").output() {
                 if verify.status.success() {
                     return "found".to_string();
                 }
@@ -115,7 +117,7 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
         for path in &homebrew_paths {
             let p = std::path::Path::new(path);
             if p.exists() {
-                if let Ok(output) = std::process::Command::new(p).arg("--version").output() {
+                if let Ok(output) = command(p).arg("--version").output() {
                     if output.status.success() {
                         return "found".to_string();
                     }
@@ -129,7 +131,7 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
     if let Some(app_data) = dirs::data_local_dir() {
         let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
         if downloaded.exists() {
-            if let Ok(output) = std::process::Command::new(&downloaded).arg("--version").output() {
+            if let Ok(output) = command(&downloaded).arg("--version").output() {
                 if output.status.success() {
                     return "found".to_string();
                 }
@@ -199,7 +201,7 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
 
     // First check if a valid FFmpeg already exists
     let existing_path = ffmpeg::get_ffmpeg_path();
-    if let Ok(output) = std::process::Command::new(&existing_path).arg("--version").output() {
+    if let Ok(output) = command(&existing_path).arg("--version").output() {
         if output.status.success() {
             return Ok("already_exists".to_string());
         }
@@ -327,7 +329,7 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
     }
 
     // Verify the downloaded file is executable
-    match std::process::Command::new(&ffmpeg_path).arg("--version").output() {
+    match command(&ffmpeg_path).arg("--version").output() {
         Ok(output) if output.status.success() => {
             Ok("downloaded".to_string())
         }
