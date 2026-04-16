@@ -16,7 +16,6 @@ export default function Header({ savePath, onPathChange }: Props) {
 
   return (
     <header className="header">
-      <h1>Test Asset Generator</h1>
       <div className="path-row">
         <span className="path-label">保存路径:</span>
         <span className="path-value" title={savePath}>

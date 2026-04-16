@@ -5,6 +5,7 @@ import type { AppConfig, TaskResult } from "../types";
 export function useGenerator() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     invoke<AppConfig>("get_config")
@@ -35,11 +36,14 @@ export function useGenerator() {
   }, []);
 
   const downloadFFmpeg = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    setDownloading(true);
     try {
       const result = await invoke<string>("download_ffmpeg");
       return { success: true, message: result };
     } catch (e) {
       return { success: false, message: String(e) };
+    } finally {
+      setDownloading(false);
     }
   }, []);
 
@@ -108,6 +112,7 @@ export function useGenerator() {
     config,
     updateConfig,
     loading,
+    downloading,
     estimateSize,
     selectPath,
     downloadFFmpeg,

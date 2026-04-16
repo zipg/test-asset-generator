@@ -20,6 +20,7 @@ export default function App() {
     config,
     updateConfig,
     estimateSize,
+    downloading,
     downloadFFmpeg,
     generateImages,
     generateAudio,
@@ -141,7 +142,7 @@ export default function App() {
             onConfigChange={handleImageConfig}
             onGenerate={handleGenerateImages}
             onEstimate={(c) => estimateSize("image", c)}
-            generating={generating}
+            generating={generating || downloading}
           />
         )}
         {activeTab === "audio" && (
@@ -151,7 +152,7 @@ export default function App() {
             onConfigChange={handleAudioConfig}
             onGenerate={handleGenerateAudio}
             onEstimate={(c) => estimateSize("audio", c)}
-            generating={generating}
+            generating={generating || downloading}
           />
         )}
         {activeTab === "video" && (
@@ -161,7 +162,7 @@ export default function App() {
             onConfigChange={handleVideoConfig}
             onGenerate={handleGenerateVideos}
             onEstimate={(c) => estimateSize("video", c)}
-            generating={generating}
+            generating={generating || downloading}
           />
         )}
       </div>
