@@ -92,7 +92,8 @@ fn check_ffmpeg() -> String {
 
     // System PATH
     if let Ok(path_var) = std::env::var("PATH") {
-        for path_dir in path_var.split(std::path::MAIN_SEPARATOR) {
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        for path_dir in path_var.split(separator) {
             let from_path = std::path::Path::new(path_dir).join(exe_name);
             if from_path.exists() {
                 if let Ok(output) = std::process::Command::new(&from_path).arg("--version").output() {
