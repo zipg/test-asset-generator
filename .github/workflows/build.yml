@@ -59,18 +59,22 @@ jobs:
       - name: Add README to macOS DMG
         if: matrix.platform == 'macos-latest'
         run: |
-          DMG_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" | head -1)
+          DMG_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -name "*.dmg" 2>/dev/null | head -1)
+          if [ -z "$DMG_PATH" ]; then
+            DMG_PATH=$(find src-tauri/target/${{ matrix.target }}/release/bundle -name "*.dmg" | head -1)
+          fi
           if [ -n "$DMG_PATH" ] && [ -f "$DMG_PATH" ]; then
-            chmod +x scripts/post_build_dmg.sh
-            ./scripts/post_build_dmg.sh "$DMG_PATH"
+            chmod +x scripts/.inject-dmg-readme.sh
+            ./scripts/.inject-dmg-readme.sh "$DMG_PATH"
           fi
 
-      - name: Upload artifact (macOS)
+      # 仅上传 .dmg：不包含 bundle/macos、share、中间文件等（与 Windows 仅 NSIS 一致）
+      - name: Upload artifact (macOS DMG only)
         if: matrix.platform == 'macos-latest'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/**
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*.dmg
           retention-days: 14
 
       # Windows: only the NSIS installer — do not publish the loose exe (bundled FFmpeg is in the installer).
