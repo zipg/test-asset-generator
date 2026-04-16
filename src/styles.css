@@ -151,6 +151,18 @@ body {
   font-weight: 600;
 }
 
+.tab-btn.disabled {
+  color: #c7c7cc;
+  cursor: not-allowed;
+}
+
+.form-row input:disabled,
+.form-row select:disabled {
+  background: #f2f2f7;
+  color: #8e8e93;
+  cursor: not-allowed;
+}
+
 /* Tab Content */
 .tab-content {
   padding: 16px 20px;

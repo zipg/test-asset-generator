@@ -50,6 +50,7 @@ export default function AudioTab({
         <select
           value={config.format}
           onChange={(e) => onConfigChange({ format: e.target.value as AudioFormat })}
+          disabled={generating}
         >
           {FORMAT_OPTIONS.map((f) => (
             <option key={f} value={f}>{f}</option>
@@ -63,6 +64,7 @@ export default function AudioTab({
           value={config.duration}
           min={1}
           onChange={(e) => onConfigChange({ duration: parseFloat(e.target.value) || 1 })}
+          disabled={generating}
         />
       </div>
       <div className="form-row">
@@ -70,6 +72,7 @@ export default function AudioTab({
         <select
           value={config.sampleRate}
           onChange={(e) => onConfigChange({ sampleRate: parseInt(e.target.value) as SampleRate })}
+          disabled={generating}
         >
           {RATE_OPTIONS.map((r) => (
             <option key={r} value={r}>{r} Hz</option>
@@ -81,6 +84,7 @@ export default function AudioTab({
         <select
           value={config.channels}
           onChange={(e) => onConfigChange({ channels: e.target.value as Channels })}
+          disabled={generating}
         >
           {CHANNEL_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -94,6 +98,7 @@ export default function AudioTab({
           value={config.count}
           min={1}
           onChange={(e) => onConfigChange({ count: parseInt(e.target.value) || 1 })}
+          disabled={generating}
         />
       </div>
       <div className="form-row">
@@ -102,6 +107,7 @@ export default function AudioTab({
           type="text"
           value={config.prefix}
           onChange={(e) => onConfigChange({ prefix: e.target.value })}
+          disabled={generating}
         />
       </div>
       <div className="estimate-row">

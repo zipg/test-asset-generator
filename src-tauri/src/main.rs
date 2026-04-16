@@ -268,7 +268,7 @@ async fn generate_images(
                 "WEBP" | "webp" => "webp",
                 _ => "png",
             };
-            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
 
@@ -393,7 +393,7 @@ async fn generate_audio(
             }
 
             let random_str = random_hex(6);
-            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
             let output_path = output_dir.join(&filename);
 
             let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
@@ -521,7 +521,7 @@ async fn generate_videos(
             }
 
             let random_str = random_hex(6);
-            let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
             let output_path = output_dir.join(&filename);
 
             let seed: u32 = unique_seed();

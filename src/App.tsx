@@ -11,10 +11,12 @@ import { useGenerator } from "./hooks/useGenerator";
 import type { MediaType, ProgressPayload, TaskResult } from "./types";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<MediaType>("image");
+  const [activeTab, setActiveTab] = useState<MediaType>("video");
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState<ProgressPayload | null>(null);
-  const [result, setResult] = useState<TaskResult | null>(null);
+  const [imageResult, setImageResult] = useState<TaskResult | null>(null);
+  const [audioResult, setAudioResult] = useState<TaskResult | null>(null);
+  const [videoResult, setVideoResult] = useState<TaskResult | null>(null);
 
   const {
     config,
@@ -35,6 +37,12 @@ export default function App() {
     }).then((fn) => { unlisten = fn; });
     return () => { unlisten?.(); };
   }, []);
+
+  const handleTabChange = useCallback((tab: MediaType) => {
+    if (!generating && !downloading) {
+      setActiveTab(tab);
+    }
+  }, [generating, downloading]);
 
   const handlePathChange = useCallback(
     (path: string) => {
@@ -72,7 +80,7 @@ export default function App() {
   const handleGenerateImages = useCallback(async () => {
     if (!config?.savePath) return;
     setGenerating(true);
-    setResult(null);
+    setImageResult(null);
     setProgress(null);
     try {
       await downloadFFmpeg();
@@ -80,9 +88,9 @@ export default function App() {
         config.imageConfig as unknown as Record<string, unknown>,
         config.savePath
       );
-      setResult(res);
+      setImageResult(res);
     } catch (e) {
-      setResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
+      setImageResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
     } finally {
       setGenerating(false);
     }
@@ -91,7 +99,7 @@ export default function App() {
   const handleGenerateAudio = useCallback(async () => {
     if (!config?.savePath) return;
     setGenerating(true);
-    setResult(null);
+    setAudioResult(null);
     setProgress(null);
     try {
       await downloadFFmpeg();
@@ -99,9 +107,9 @@ export default function App() {
         config.audioConfig as unknown as Record<string, unknown>,
         config.savePath
       );
-      setResult(res);
+      setAudioResult(res);
     } catch (e) {
-      setResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
+      setAudioResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
     } finally {
       setGenerating(false);
     }
@@ -110,7 +118,7 @@ export default function App() {
   const handleGenerateVideos = useCallback(async () => {
     if (!config?.savePath) return;
     setGenerating(true);
-    setResult(null);
+    setVideoResult(null);
     setProgress(null);
     try {
       await downloadFFmpeg();
@@ -118,9 +126,9 @@ export default function App() {
         config.videoConfig as unknown as Record<string, unknown>,
         config.savePath
       );
-      setResult(res);
+      setVideoResult(res);
     } catch (e) {
-      setResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
+      setVideoResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
     } finally {
       setGenerating(false);
     }
@@ -130,11 +138,23 @@ export default function App() {
     return <div className="app-container"><div style={{ padding: "24px" }}>加载中...</div></div>;
   }
 
+  const isDisabled = generating || downloading;
+
   return (
     <div className="app-container">
       <Header savePath={config.savePath ?? undefined} onPathChange={handlePathChange} />
-      <TabBar active={activeTab} onChange={setActiveTab} />
+      <TabBar active={activeTab} onChange={handleTabChange} disabled={isDisabled} />
       <div className="tab-content">
+        {activeTab === "video" && (
+          <VideoTab
+            config={config.videoConfig}
+            savePath={config.savePath ?? undefined}
+            onConfigChange={handleVideoConfig}
+            onGenerate={handleGenerateVideos}
+            onEstimate={(c) => estimateSize("video", c)}
+            generating={isDisabled}
+          />
+        )}
         {activeTab === "image" && (
           <ImageTab
             config={config.imageConfig}
@@ -142,7 +162,7 @@ export default function App() {
             onConfigChange={handleImageConfig}
             onGenerate={handleGenerateImages}
             onEstimate={(c) => estimateSize("image", c)}
-            generating={generating || downloading}
+            generating={isDisabled}
           />
         )}
         {activeTab === "audio" && (
@@ -152,17 +172,7 @@ export default function App() {
             onConfigChange={handleAudioConfig}
             onGenerate={handleGenerateAudio}
             onEstimate={(c) => estimateSize("audio", c)}
-            generating={generating || downloading}
-          />
-        )}
-        {activeTab === "video" && (
-          <VideoTab
-            config={config.videoConfig}
-            savePath={config.savePath ?? undefined}
-            onConfigChange={handleVideoConfig}
-            onGenerate={handleGenerateVideos}
-            onEstimate={(c) => estimateSize("video", c)}
-            generating={generating || downloading}
+            generating={isDisabled}
           />
         )}
       </div>
@@ -175,7 +185,9 @@ export default function App() {
           onCancel={cancelGeneration}
         />
       )}
-      {result && <ResultSummary {...result} />}
+      {activeTab === "video" && videoResult && <ResultSummary {...videoResult} />}
+      {activeTab === "image" && imageResult && <ResultSummary {...imageResult} />}
+      {activeTab === "audio" && audioResult && <ResultSummary {...audioResult} />}
     </div>
   );
 }
