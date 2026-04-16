@@ -1,11 +1,80 @@
-use std::path::PathBuf;
+use std::env;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+fn where_ffmpeg_exe_lines() -> Option<String> {
+    let output = Command::new("where.exe").arg("ffmpeg.exe").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// First path reported by `where` that exists on disk (no exec check). Used to align
+/// `download_ffmpeg` with `check_ffmpeg` when `--version` cannot be run in-process.
+pub fn windows_ffmpeg_path_from_where_exists() -> Option<PathBuf> {
+    let text = where_ffmpeg_exe_lines()?;
+    for line in text.lines() {
+        let p = line.trim();
+        if p.is_empty() {
+            continue;
+        }
+        let pb = PathBuf::from(p);
+        if pb.exists() {
+            return Some(pb);
+        }
+    }
+    None
+}
+
+/// Prefer a `where.exe` candidate that successfully runs `ffmpeg.exe -version`.
+pub fn first_working_windows_ffmpeg_from_where() -> Option<PathBuf> {
+    let text = where_ffmpeg_exe_lines()?;
+    for line in text.lines() {
+        let p = line.trim();
+        if p.is_empty() {
+            continue;
+        }
+        let pb = PathBuf::from(p);
+        if !pb.exists() {
+            continue;
+        }
+        if let Ok(o) = Command::new(&pb).arg("--version").output() {
+            if o.status.success() {
+                return Some(pb);
+            }
+        }
+    }
+    None
+}
+
+/// Optional portable layout: `ffmpeg.exe` or `ffmpeg/ffmpeg.exe` next to the app `.exe`.
+pub fn bundled_ffmpeg_beside_executable_windows() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let dir = exe.parent()?;
+    for rel in ["ffmpeg/ffmpeg.exe", "ffmpeg.exe"] {
+        let p = dir.join(Path::new(rel));
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
+}
+
 pub fn get_ffmpeg_path() -> PathBuf {
     let os = std::env::consts::OS;
     let exe_name = if os == "windows" { "ffmpeg.exe" } else { "ffmpeg" };
+
+    if os == "windows" {
+        if let Some(p) = bundled_ffmpeg_beside_executable_windows() {
+            return p;
+        }
+        if let Some(p) = first_working_windows_ffmpeg_from_where() {
+            return p;
+        }
+    }
 
     let homebrew_paths = [
         "/opt/homebrew/bin/ffmpeg",
@@ -42,8 +111,8 @@ pub fn get_ffmpeg_path() -> PathBuf {
         }
     }
 
-    // 2. Homebrew paths when not handled above (e.g. non-macOS never runs the macOS block)
-    if os != "macos" {
+    // 2. Homebrew-style paths (Linux/Homebrew on Linux; skip Windows — meaningless there)
+    if os != "macos" && os != "windows" {
         for path in &homebrew_paths {
             let p = std::path::Path::new(path);
             if p.exists() {
@@ -52,10 +121,10 @@ pub fn get_ffmpeg_path() -> PathBuf {
         }
     }
 
-    // 3. Try system PATH
-    if let Ok(path_var) = std::env::var("PATH") {
-        for path_dir in path_var.split(':') {
-            let from_path = std::path::Path::new(path_dir).join(exe_name);
+    // 3. PATH (Windows uses `;`, Unix uses `:` — use std::env::split_paths)
+    if let Ok(path_var) = env::var("PATH") {
+        for path_dir in env::split_paths(&path_var) {
+            let from_path = path_dir.join(&exe_name);
             if from_path.exists() {
                 return from_path;
             }

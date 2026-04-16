@@ -75,19 +75,38 @@ fn check_ffmpeg() -> String {
         }
     }
 
-    // Try common homebrew paths
+    // Windows: PATH uses `;` — discovery lives in ffmpeg.rs (`where.exe` + split_paths).
+    if os == "windows" {
+        if let Some(p) = ffmpeg::bundled_ffmpeg_beside_executable_windows() {
+            if let Ok(verify) = std::process::Command::new(&p).arg("--version").output() {
+                if verify.status.success() {
+                    return "found".to_string();
+                }
+            }
+        }
+        if ffmpeg::first_working_windows_ffmpeg_from_where().is_some() {
+            return "found".to_string();
+        }
+        if ffmpeg::windows_ffmpeg_path_from_where_exists().is_some() {
+            return "found".to_string();
+        }
+    }
+
+    // Try common homebrew paths (Unix; not applicable on Windows)
     let homebrew_paths = [
         "/opt/homebrew/bin/ffmpeg",
         "/usr/local/bin/ffmpeg",
         "/opt/homebrew/opt/ffmpeg/bin/ffmpeg",
         "/usr/local/opt/ffmpeg/bin/ffmpeg",
     ];
-    for path in &homebrew_paths {
-        let p = std::path::Path::new(path);
-        if p.exists() {
-            if let Ok(output) = std::process::Command::new(p).arg("--version").output() {
-                if output.status.success() {
-                    return "found".to_string();
+    if os != "windows" {
+        for path in &homebrew_paths {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                if let Ok(output) = std::process::Command::new(p).arg("--version").output() {
+                    if output.status.success() {
+                        return "found".to_string();
+                    }
                 }
             }
         }
@@ -147,6 +166,15 @@ async fn download_ffmpeg() -> Result<String, String> {
         }
     }
 
+    if os == "windows" {
+        if ffmpeg::bundled_ffmpeg_beside_executable_windows().is_some() {
+            return Ok("already_exists".to_string());
+        }
+        if ffmpeg::windows_ffmpeg_path_from_where_exists().is_some() {
+            return Ok("already_exists".to_string());
+        }
+    }
+
     // No valid FFmpeg found, need to download
     let (url, exe_name) = match os {
         "windows" => (
@@ -193,23 +221,33 @@ async fn download_ffmpeg() -> Result<String, String> {
         let mut archive = zip::ZipArchive::new(cursor)
             .map_err(|e| format!("Failed to read zip: {}", e))?;
 
-        let mut ffmpeg_file = std::fs::File::create(&ffmpeg_path)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-
-        let mut found = false;
+        // BtbN zips may contain several ffmpeg.exe entries; prefer .../bin/ffmpeg.exe.
+        let mut best: Option<(usize, u8)> = None;
         for i in 0..archive.len() {
-            let mut file = archive.by_index(i)
+            let file = archive
+                .by_index(i)
                 .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-            if file.name().ends_with("ffmpeg.exe") {
-                std::io::copy(&mut file, &mut ffmpeg_file)
-                    .map_err(|e| format!("Failed to write ffmpeg.exe: {}", e))?;
-                found = true;
-                break;
+            let name = file.name().replace('\\', "/");
+            if name.ends_with("ffmpeg.exe") {
+                let rank = if name.contains("/bin/") { 0u8 } else { 1u8 };
+                let better = match best {
+                    None => true,
+                    Some((_, r)) => rank < r,
+                };
+                if better {
+                    best = Some((i, rank));
+                }
             }
         }
-        if !found {
-            return Err("ffmpeg.exe not found in zip".to_string());
-        }
+        let (idx, _) = best.ok_or_else(|| "ffmpeg.exe not found in zip".to_string())?;
+
+        let mut file = archive
+            .by_index(idx)
+            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
+        let mut out = std::fs::File::create(&ffmpeg_path)
+            .map_err(|e| format!("Failed to create file: {}", e))?;
+        std::io::copy(&mut file, &mut out)
+            .map_err(|e| format!("Failed to write ffmpeg.exe: {}", e))?;
     } else {
         // macOS
         let mut ffmpeg_file = std::fs::File::create(&ffmpeg_path)
@@ -234,7 +272,12 @@ async fn download_ffmpeg() -> Result<String, String> {
             Err("FFmpeg downloaded but failed to run".to_string())
         }
         Err(e) => {
-            Err(format!("FFmpeg is not executable: {}. Consider installing via: brew install ffmpeg", e))
+            let hint = if os == "windows" {
+                "Install FFmpeg (e.g. winget install ffmpeg) or place ffmpeg.exe on PATH."
+            } else {
+                "Consider installing via: brew install ffmpeg"
+            };
+            Err(format!("FFmpeg is not executable: {}. {}", e, hint))
         }
     }
 }
