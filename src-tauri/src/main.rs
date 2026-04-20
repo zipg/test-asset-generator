@@ -39,6 +39,9 @@ fn main() {
             if std::env::consts::OS == "windows" {
                 let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app.handle());
             }
+            if std::env::consts::OS == "macos" {
+                let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app.handle());
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -66,6 +69,13 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
     if os == "windows" {
         let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app);
         if ffmpeg::bundled_resource_ffmpeg_exists(&app) {
+            return "found".to_string();
+        }
+    }
+
+    if os == "macos" {
+        let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
+        if ffmpeg::bundled_resource_ffmpeg_exists_mac(&app) {
             return "found".to_string();
         }
     }
@@ -197,6 +207,9 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
 
     if os == "windows" {
         let _ = ffmpeg::ensure_windows_bundled_ffmpeg_copied(&app);
+    }
+    if os == "macos" {
+        let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
     }
 
     // First check if a valid FFmpeg already exists

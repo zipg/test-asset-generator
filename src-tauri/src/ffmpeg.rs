@@ -69,6 +69,21 @@ pub fn bundled_resource_ffmpeg_exists(app: &tauri::AppHandle) -> bool {
     false
 }
 
+/// True if the macOS app bundle ships `ffmpeg` under Resources (see `tauri.macos.bundle.json`).
+pub fn bundled_resource_ffmpeg_exists_mac(app: &tauri::AppHandle) -> bool {
+    if std::env::consts::OS != "macos" {
+        return false;
+    }
+    for rel in ["ffmpeg", "resources/ffmpeg"] {
+        if let Ok(p) = app.path().resolve(rel, BaseDirectory::Resource) {
+            if p.exists() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Copy shipped `resources/ffmpeg.exe` from the app bundle to LocalAppData (first run / repair).
 pub fn ensure_windows_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<(), String> {
     if std::env::consts::OS != "windows" {
@@ -103,6 +118,50 @@ pub fn ensure_windows_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<()
                 e
             )
         })?;
+        return Ok(());
+    }
+    Ok(())
+}
+
+/// Copy shipped `resources/ffmpeg` from the app bundle to Application Support (first run / repair).
+pub fn ensure_macos_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<(), String> {
+    if std::env::consts::OS != "macos" {
+        return Ok(());
+    }
+    for rel in ["ffmpeg", "resources/ffmpeg"] {
+        let src = match app.path().resolve(rel, BaseDirectory::Resource) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if !src.exists() {
+            continue;
+        }
+        let Some(dest_dir) = get_ffmpeg_dir() else {
+            return Ok(());
+        };
+        let dest = dest_dir.join("ffmpeg");
+        let need_copy = !dest.exists()
+            || command(&dest)
+                .arg("--version")
+                .output()
+                .map(|o| !o.status.success())
+                .unwrap_or(true);
+        if !need_copy {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+        std::fs::copy(&src, &dest).map_err(|e| {
+            format!(
+                "Failed to copy bundled FFmpeg to {}: {}",
+                dest.display(),
+                e
+            )
+        })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&dest, std::fs::Permissions::from_mode(0o755));
+        }
         return Ok(());
     }
     Ok(())
@@ -148,9 +207,14 @@ pub fn get_ffmpeg_path() -> PathBuf {
         "/usr/local/opt/ffmpeg/bin/ffmpeg",
     ];
 
-    // macOS: match check_ffmpeg resolution — prefer `which` and Homebrew before any
-    // previously downloaded copy (avoids a corrupt partial download shadowing brew).
+    // macOS: prefer our copy under Application Support (bundled or prior download), then system.
     if os == "macos" {
+        if let Some(app_data) = dirs::data_local_dir() {
+            let local = app_data.join("Muse_Generator").join("ffmpeg").join(&exe_name);
+            if local.exists() {
+                return local;
+            }
+        }
         if let Ok(output) = command("/usr/bin/which").arg("ffmpeg").output() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() && path != "ffmpeg not found" {
@@ -168,7 +232,7 @@ pub fn get_ffmpeg_path() -> PathBuf {
         }
     }
 
-    // 1. Bundled / downloaded copy in app data (Windows zip extract, or macOS fallback)
+    // 1. Bundled / downloaded copy in app data (Windows zip extract, or non-mac unix fallback)
     if let Some(app_data) = dirs::data_local_dir() {
         let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
         if downloaded.exists() {

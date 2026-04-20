@@ -3,4 +3,5 @@ dist/
 src-tauri/target/
 ffmpeg/win/ffmpeg.exe
 src-tauri/resources/ffmpeg.exe
+src-tauri/resources/ffmpeg
 .DS_Store

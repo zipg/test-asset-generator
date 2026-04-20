@@ -6,7 +6,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "tauri:build:win": "npm run build && bash scripts/fetch-ffmpeg-windows.sh && npm run tauri -- build --config src-tauri/tauri.windows.bundle.json"
+    "tauri:build:win": "npm run build && bash scripts/fetch-ffmpeg-windows.sh && npm run tauri -- build --config src-tauri/tauri.windows.bundle.json",
+    "tauri:build:mac": "npm run build && bash scripts/fetch-ffmpeg-macos.sh aarch64-apple-darwin && npm run tauri -- build --bundles dmg --config src-tauri/tauri.macos.bundle.json",
+    "tauri:build:mac:intel": "npm run build && bash scripts/fetch-ffmpeg-macos.sh x86_64-apple-darwin && npm run tauri -- build --target x86_64-apple-darwin --bundles dmg --config src-tauri/tauri.macos.bundle.json"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
