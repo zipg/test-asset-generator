@@ -826,30 +826,12 @@ async fn generate_videos(
 }
 
 fn create_timestamp_dir(base: &str, prefix: &str) -> Result<std::path::PathBuf, String> {
-    let now = chrono_lite_timestamp();
-    let dir_name = format!("{}_{}", prefix, now);
+    // 使用系统本地时区（国内 Mac 一般为北京时间），避免原先 UTC + 错误“月日”推算
+    let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let dir_name = format!("{}_{}", prefix, stamp);
     let dir = std::path::PathBuf::from(base).join(&dir_name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;
     Ok(dir)
-}
-
-fn chrono_lite_timestamp() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let dur = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap();
-    let secs = dur.as_secs();
-    let remaining = secs % 86400;
-    let hours = remaining / 3600;
-    let minutes = (remaining % 3600) / 60;
-    let seconds = remaining % 60;
-    let days = secs / 86400;
-    let year_days = days;
-    let year = 1970 + year_days / 365;
-    let yday = year_days % 365;
-    let month = yday / 30 + 1;
-    let day = yday % 30 + 1;
-    format!("{:02}{:02}_{:02}{:02}{:02}", month, day, hours, minutes, seconds)
 }
 
 fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) -> String {
