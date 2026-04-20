@@ -621,7 +621,11 @@ async fn generate_audio(
                     args.push(s.clone());
                 }
                 args.push("-filter_complex".to_string());
-                args.push(audio_music::filter_concat_loop_atrim(config.duration));
+                args.push(audio_music::filter_concat_loop_atrim(
+                    config.duration,
+                    seed,
+                    config.sample_rate,
+                ));
                 args.push("-map".to_string());
                 args.push("[aout]".to_string());
             } else {
@@ -645,6 +649,10 @@ async fn generate_audio(
             if ext != "wav" {
                 let codec = if ext == "aac" { "aac" } else { "mp3" };
                 args.extend_from_slice(&["-acodec".to_string(), codec.to_string()]);
+            }
+
+            if config.audio_content == "random_music" {
+                args.extend_from_slice(&["-t".to_string(), format_duration(config.duration)]);
             }
 
             args.push(output_path.to_str().unwrap().to_string());
@@ -831,7 +839,11 @@ async fn generate_videos(
                         args.push(s.clone());
                     }
                     args.push("-filter_complex".to_string());
-                    args.push(audio_music::filter_video_music_track(config.duration));
+                    args.push(audio_music::filter_video_music_track(
+                        config.duration,
+                        seed,
+                        48_000,
+                    ));
                     args.extend_from_slice(&[
                         "-map".to_string(),
                         "0:v".to_string(),
@@ -912,6 +924,9 @@ async fn generate_videos(
                 ]);
                 if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
                     args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
+                }
+                if config.audio_content == "random_music" {
+                    args.extend_from_slice(&["-t".to_string(), duration_str.clone()]);
                 }
             } else {
                 args.extend_from_slice(&["-f".to_string(), "lavfi".to_string(), "-i".to_string(), filter]);

@@ -15,6 +15,31 @@ fn midi_to_hz(m: f64) -> f64 {
     440.0 * (2.0_f64).powf((m - 69.0) / 12.0)
 }
 
+/// 与 `sine_inputs` 一致的单音时长（秒），用于计算循环段长与 `aloop` 的 `size`。
+fn per_note_secs(seed: u32) -> f64 {
+    0.11 + ((seed >> 4) % 28) as f64 * 0.0065
+}
+
+/// 拼接后一段「乐句」的样本数（用于 `aloop` 的 `size`，避免 `size` 与真实段长不符导致只播一遍）。
+fn segment_len_samples(seed: u32, sample_rate: u32) -> u64 {
+    let sec = per_note_secs(seed) * N_NOTES as f64;
+    (sec * f64::from(sample_rate)).round().max(1.0) as u64
+}
+
+/// `[seg]asetpts` + `aloop` + `atrim`：`aloop` 需显式 `size`（样本数），否则部分环境下等价于不循环。
+fn filter_seg_loop_atrim(duration_secs: f64, seed: u32, sample_rate: u32, out_label: &str) -> String {
+    let d = fmt_duration(duration_secs);
+    let seg_sec = per_note_secs(seed) * N_NOTES as f64;
+    let seg_sec = seg_sec.max(1e-6);
+    let total_plays = (duration_secs / seg_sec).ceil().max(1.0) as u64;
+    let loop_param = total_plays.saturating_sub(1).min(50_000);
+    let n_samp = segment_len_samples(seed, sample_rate);
+    format!(
+        "[seg]asetpts=PTS-STARTPTS,aloop=loop={}:size={},atrim=duration={}[{}]",
+        loop_param, n_samp, d, out_label
+    )
+}
+
 /// 原曲连续 32 音片段条数（每条独立、非 8+8+8+8 拼接）。
 const EXCERPT_COUNT: usize = 18;
 
@@ -67,7 +92,7 @@ pub fn sine_inputs(seed: u32, sample_rate: u32) -> [String; N_NOTES] {
     let excerpt_idx = (seed as usize) % EXCERPT_COUNT;
     let notes = &EXCERPTS[excerpt_idx];
     let transpose = (seed % 19) as i32 - 9;
-    let per_note = 0.11 + ((seed >> 4) % 28) as f64 * 0.0065;
+    let per_note = per_note_secs(seed);
 
     let mut out: [String; N_NOTES] = std::array::from_fn(|_| String::new());
     for (i, &m) in notes.iter().enumerate() {
@@ -97,22 +122,20 @@ fn concat_labels_from_one(n: usize) -> String {
     s
 }
 
-pub fn filter_concat_loop_atrim(duration_secs: f64) -> String {
-    let d = fmt_duration(duration_secs);
+pub fn filter_concat_loop_atrim(duration_secs: f64, seed: u32, sample_rate: u32) -> String {
     format!(
-        "{}concat=n={}:v=0:a=1[seg];[seg]aloop=loop=-1,atrim=duration={}[aout]",
+        "{}concat=n={}:v=0:a=1[seg];{}",
         concat_labels_audio_only(N_NOTES),
         N_NOTES,
-        d
+        filter_seg_loop_atrim(duration_secs, seed, sample_rate, "aout")
     )
 }
 
-pub fn filter_video_music_track(duration_secs: f64) -> String {
-    let d = fmt_duration(duration_secs);
+pub fn filter_video_music_track(duration_secs: f64, seed: u32, sample_rate: u32) -> String {
     format!(
-        "{}concat=n={}:v=0:a=1[seg];[seg]aloop=loop=-1,atrim=duration={}[mus]",
+        "{}concat=n={}:v=0:a=1[seg];{}",
         concat_labels_from_one(N_NOTES),
         N_NOTES,
-        d
+        filter_seg_loop_atrim(duration_secs, seed, sample_rate, "mus")
     )
 }

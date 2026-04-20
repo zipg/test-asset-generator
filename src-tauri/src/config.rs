@@ -23,7 +23,7 @@ pub struct AudioConfig {
     pub channels: String,
     pub count: u32,
     pub prefix: String,
-    /// noise | rhythm | notes
+    /// noise | rhythm | notes | random_music
     #[serde(default = "default_audio_content")]
     pub audio_content: String,
 }
@@ -40,9 +40,9 @@ pub struct VideoConfig {
     pub content_type: String,
     pub count: u32,
     pub prefix: String,
-    #[serde(default)]
+    #[serde(default = "default_add_audio_track")]
     pub add_audio_track: bool,
-    /// 与音频 tab 一致：noise | rhythm | notes
+    /// 与音频 tab 一致：noise | rhythm | notes | random_music
     #[serde(default = "default_audio_content")]
     pub audio_content: String,
 }
@@ -60,13 +60,17 @@ pub struct AppConfig {
 }
 
 fn default_audio_content() -> String {
-    "notes".to_string()
+    "random_music".to_string()
+}
+
+fn default_add_audio_track() -> bool {
+    true
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            schema_version: 1,
+            schema_version: 2,
             save_path: None,
             image_config: ImageConfig {
                 format: "PNG".to_string(),
@@ -83,7 +87,7 @@ impl Default for AppConfig {
                 channels: "mono".to_string(),
                 count: 10,
                 prefix: "测试音频".to_string(),
-                audio_content: "notes".to_string(),
+                audio_content: "random_music".to_string(),
             },
             video_config: VideoConfig {
                 format: "MP4".to_string(),
@@ -95,8 +99,8 @@ impl Default for AppConfig {
                 content_type: "gradient".to_string(),
                 count: 10,
                 prefix: "测试视频".to_string(),
-                add_audio_track: false,
-                audio_content: "notes".to_string(),
+                add_audio_track: true,
+                audio_content: "random_music".to_string(),
             },
         }
     }
