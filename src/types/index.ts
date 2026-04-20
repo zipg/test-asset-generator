@@ -1,7 +1,23 @@
-export type ImageFormat = "PNG" | "JPG" | "WEBP";
+export type ImageFormat =
+  | "PNG"
+  | "JPG"
+  | "JPEG"
+  | "WEBP"
+  | "GIF"
+  | "BMP"
+  | "TIFF";
 export type AudioFormat = "MP3" | "WAV" | "AAC";
-export type VideoFormat = "MP4" | "MOV" | "WEBM";
+export type VideoFormat =
+  | "MP4"
+  | "MOV"
+  | "WEBM"
+  | "AVI"
+  | "FLV"
+  | "MKV"
+  | "3GP";
 export type ContentType = "solid" | "gradient" | "pattern" | "noise";
+/** 音频内容：随机噪音 / 简单节奏 / 随机音符 */
+export type AudioContentType = "noise" | "rhythm" | "notes";
 export type Codec = "h264" | "hevc";
 export type SampleRate = 44100 | 48000;
 export type Channels = "mono" | "stereo";
@@ -23,6 +39,7 @@ export interface AudioConfig {
   channels: Channels;
   count: number;
   prefix: string;
+  audioContent: AudioContentType;
 }
 
 export interface VideoConfig {
@@ -35,6 +52,8 @@ export interface VideoConfig {
   contentType: ContentType;
   count: number;
   prefix: string;
+  addAudioTrack: boolean;
+  audioContent: AudioContentType;
 }
 
 export interface AppConfig {

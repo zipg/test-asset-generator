@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod audio_lavfi;
 mod config;
 mod ffmpeg;
 mod generator;
@@ -401,8 +402,11 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
             let format = cfg["format"].as_str().unwrap_or("PNG");
             let bytes_per_pixel = match format {
-                "JPG" | "jpg" => 0.5,
+                "JPG" | "jpg" | "JPEG" | "jpeg" => 0.5,
                 "WEBP" | "webp" => 0.3,
+                "GIF" | "gif" => 0.4,
+                "BMP" | "bmp" => 3.0,
+                "TIFF" | "tiff" | "TIF" | "tif" => 4.0,
                 _ => 3.0,
             };
             let size = (w * h) as f64 * bytes_per_pixel * (count as f64) / 1_048_576.0;
@@ -426,8 +430,12 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
             let duration: f64 = cfg["duration"].as_f64().unwrap_or(60.0);
             let fps: u64 = cfg["fps"].as_u64().unwrap_or(30);
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
+            let add_audio = cfg["addAudioTrack"].as_bool() == Some(true);
             let kbps = (w * h * fps) as f64 * 0.1 / 1000.0;
-            let size = (duration * kbps * 1000.0 / 8.0) * (count as f64) / 1_048_576.0;
+            let mut size = (duration * kbps * 1000.0 / 8.0) * (count as f64) / 1_048_576.0;
+            if add_audio {
+                size += (duration * 128_000.0 / 8.0) * (count as f64) / 1_048_576.0;
+            }
             format!("~{:.1} MB", size.max(0.01))
         }
         _ => "~0 MB".to_string(),
@@ -467,8 +475,11 @@ async fn generate_images(
 
             let random_str = random_hex(6);
             let ext = match config.format.as_str() {
-                "JPG" | "jpg" => "jpg",
+                "JPG" | "jpg" | "JPEG" | "jpeg" => "jpg",
                 "WEBP" | "webp" => "webp",
+                "GIF" | "gif" => "gif",
+                "BMP" | "bmp" => "bmp",
+                "TIFF" | "tiff" | "TIF" | "tif" => "tiff",
                 _ => "png",
             };
             let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
@@ -487,6 +498,7 @@ async fn generate_images(
             match ext {
                 "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
                 "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
                 _ => {}
             }
 
@@ -570,13 +582,11 @@ async fn generate_audio(
     let mut failed = 0u32;
     let mut errors: Vec<serde_json::Value> = Vec::new();
 
-    let channels = if config.channels == "stereo" { "2" } else { "1" };
     let ext = match config.format.as_str() {
         "WAV" | "wav" => "wav",
         "AAC" | "aac" => "aac",
         _ => "mp3",
     };
-    let duration_str = format_duration(config.duration);
 
     let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -599,19 +609,27 @@ async fn generate_audio(
             let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
             let output_path = output_dir.join(&filename);
 
-            let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
             let seed: u32 = unique_seed();
 
-            let anoisesrc = format!(
-                "anoisesrc=d={}:a={}:r={}:c={}:s={}",
-                duration_str, amplitude, config.sample_rate, channels, seed
+            let lavfi = audio_lavfi::build_lavfi_audio(
+                &config.audio_content,
+                config.duration,
+                config.sample_rate,
+                &config.channels,
+                seed,
             );
 
             let mut args: Vec<String> = vec![
-                "-f".to_string(), "lavfi".to_string(),
-                "-i".to_string(), anoisesrc,
+                "-f".to_string(),
+                "lavfi".to_string(),
+                "-i".to_string(),
+                lavfi,
                 "-y".to_string(),
             ];
+
+            if audio_lavfi::needs_stereo_upmix(&config.audio_content, &config.channels) {
+                args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
+            }
 
             if ext != "wav" {
                 let codec = if ext == "aac" { "aac" } else { "mp3" };
@@ -698,12 +716,16 @@ async fn generate_videos(
     let mut failed = 0u32;
     let mut errors: Vec<serde_json::Value> = Vec::new();
 
-    let ext = match config.format.as_str() {
-        "MOV" | "mov" => "mov",
-        "WEBM" | "webm" => "webm",
+    let fmt_upper = config.format.to_ascii_uppercase();
+    let ext = match fmt_upper.as_str() {
+        "MOV" => "mov",
+        "WEBM" => "webm",
+        "AVI" => "avi",
+        "FLV" => "flv",
+        "MKV" => "mkv",
+        "3GP" => "3gp",
         _ => "mp4",
     };
-    let codec = if config.codec == "h264" { "libx264" } else { "libx265" };
     let duration_str = format_duration(config.duration);
 
     let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -764,18 +786,149 @@ async fn generate_videos(
             };
 
             let fps_str = config.fps.to_string();
-            let args: Vec<String> = vec![
-                "-f".to_string(), "lavfi".to_string(),
-                "-i".to_string(), filter,
-                "-c:v".to_string(), codec.to_string(),
-                "-r".to_string(), fps_str,
-                "-t".to_string(), duration_str.clone(),
-                "-pix_fmt".to_string(), "yuv420p".to_string(),
-                "-y".to_string(),
-                output_path.to_str().unwrap().to_string(),
-            ];
+            let vcodec = match fmt_upper.as_str() {
+                "WEBM" => "libvpx-vp9",
+                "FLV" | "3GP" => "libx264",
+                _ => {
+                    if config.codec == "hevc" {
+                        "libx265"
+                    } else {
+                        "libx264"
+                    }
+                }
+            };
 
-            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
+            let mut args: Vec<String> = vec!["-y".to_string()];
+
+            if config.add_audio_track {
+                let audio_lavfi = audio_lavfi::build_lavfi_audio_for_video(
+                    &config.audio_content,
+                    config.duration,
+                    seed,
+                );
+                args.extend_from_slice(&[
+                    "-f".to_string(),
+                    "lavfi".to_string(),
+                    "-i".to_string(),
+                    filter.clone(),
+                    "-f".to_string(),
+                    "lavfi".to_string(),
+                    "-i".to_string(),
+                    audio_lavfi,
+                    "-map".to_string(),
+                    "0:v".to_string(),
+                    "-map".to_string(),
+                    "1:a".to_string(),
+                    "-shortest".to_string(),
+                ]);
+                if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
+                    args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
+                }
+                match vcodec {
+                    "libvpx-vp9" => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libvpx-vp9".to_string(),
+                            "-b:v".to_string(),
+                            "0".to_string(),
+                            "-crf".to_string(),
+                            "35".to_string(),
+                            "-row-mt".to_string(),
+                            "1".to_string(),
+                        ]);
+                    }
+                    "libx265" => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libx265".to_string(),
+                            "-preset".to_string(),
+                            "fast".to_string(),
+                        ]);
+                    }
+                    _ => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libx264".to_string(),
+                            "-preset".to_string(),
+                            "fast".to_string(),
+                        ]);
+                    }
+                }
+                args.push("-r".to_string());
+                args.push(fps_str.clone());
+                let aenc = match fmt_upper.as_str() {
+                    "WEBM" => "libopus",
+                    _ => "aac",
+                };
+                args.extend_from_slice(&[
+                    "-c:a".to_string(),
+                    aenc.to_string(),
+                    "-b:a".to_string(),
+                    "128k".to_string(),
+                    "-pix_fmt".to_string(),
+                    "yuv420p".to_string(),
+                ]);
+                if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
+                    args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
+                }
+            } else {
+                args.extend_from_slice(&["-f".to_string(), "lavfi".to_string(), "-i".to_string(), filter]);
+                match vcodec {
+                    "libvpx-vp9" => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libvpx-vp9".to_string(),
+                            "-b:v".to_string(),
+                            "0".to_string(),
+                            "-crf".to_string(),
+                            "35".to_string(),
+                            "-row-mt".to_string(),
+                            "1".to_string(),
+                        ]);
+                    }
+                    "libx265" => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libx265".to_string(),
+                            "-preset".to_string(),
+                            "fast".to_string(),
+                        ]);
+                    }
+                    _ => {
+                        args.extend_from_slice(&[
+                            "-c:v".to_string(),
+                            "libx264".to_string(),
+                            "-preset".to_string(),
+                            "fast".to_string(),
+                        ]);
+                    }
+                }
+                args.extend_from_slice(&[
+                    "-r".to_string(),
+                    fps_str.clone(),
+                    "-t".to_string(),
+                    duration_str.clone(),
+                    "-pix_fmt".to_string(),
+                    "yuv420p".to_string(),
+                ]);
+                if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
+                    args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
+                }
+            }
+
+            args.push(output_path.to_str().unwrap().to_string());
+
+            let timeout_secs = {
+                let base = if vcodec.contains("vpx") {
+                    90.0
+                } else {
+                    45.0
+                };
+                let t = base + config.duration * 3.0;
+                t.min(900.0).max(25.0) as u64
+            };
+
+            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, timeout_secs) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {

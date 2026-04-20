@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AudioConfig, AudioFormat, SampleRate, Channels } from "../types";
+import type {
+  AudioConfig,
+  AudioFormat,
+  SampleRate,
+  Channels,
+  AudioContentType,
+} from "../types";
 
 interface Props {
   config: AudioConfig;
@@ -16,6 +22,11 @@ const RATE_OPTIONS: SampleRate[] = [44100, 48000];
 const CHANNEL_OPTIONS: { value: Channels; label: string }[] = [
   { value: "mono", label: "单声道" },
   { value: "stereo", label: "立体声" },
+];
+const AUDIO_CONTENT_OPTIONS: { value: AudioContentType; label: string }[] = [
+  { value: "noise", label: "随机噪音" },
+  { value: "rhythm", label: "简单节奏" },
+  { value: "notes", label: "随机音符" },
 ];
 
 export default function AudioTab({
@@ -94,6 +105,20 @@ export default function AudioTab({
         </select>
       </div>
       <div className="form-row">
+        <label>音频内容</label>
+        <select
+          value={config.audioContent}
+          onChange={(e) =>
+            onConfigChange({ audioContent: e.target.value as AudioContentType })
+          }
+          disabled={disabled || generating}
+        >
+          {AUDIO_CONTENT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="form-row">
         <label>文件数量</label>
         <input
           type="number"
@@ -104,7 +129,7 @@ export default function AudioTab({
         />
       </div>
       <div className="form-row">
-        <label>前缀</label>
+        <label>文件名前缀</label>
         <input
           type="text"
           value={config.prefix}

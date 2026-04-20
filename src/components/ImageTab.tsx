@@ -11,7 +11,15 @@ interface Props {
   disabled?: boolean;
 }
 
-const FORMAT_OPTIONS: ImageFormat[] = ["PNG", "JPG", "WEBP"];
+const FORMAT_OPTIONS: ImageFormat[] = [
+  "PNG",
+  "JPG",
+  "JPEG",
+  "WEBP",
+  "GIF",
+  "BMP",
+  "TIFF",
+];
 const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
   { value: "noise", label: "随机噪声" },
   { value: "solid", label: "纯色" },
@@ -134,7 +142,7 @@ export default function ImageTab({
         />
       </div>
       <div className="form-row">
-        <label>前缀</label>
+        <label>文件名前缀</label>
         <input
           type="text"
           value={config.prefix}

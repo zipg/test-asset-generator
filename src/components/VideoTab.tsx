@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import type { VideoConfig, VideoFormat, Codec, ContentType } from "../types";
+import type {
+  VideoConfig,
+  VideoFormat,
+  Codec,
+  ContentType,
+  AudioContentType,
+} from "../types";
 
 interface Props {
   config: VideoConfig;
@@ -11,7 +17,20 @@ interface Props {
   disabled?: boolean;
 }
 
-const FORMAT_OPTIONS: VideoFormat[] = ["MP4", "MOV", "WEBM"];
+const FORMAT_OPTIONS: VideoFormat[] = [
+  "MP4",
+  "MOV",
+  "WEBM",
+  "AVI",
+  "FLV",
+  "MKV",
+  "3GP",
+];
+const AUDIO_CONTENT_OPTIONS: { value: AudioContentType; label: string }[] = [
+  { value: "noise", label: "随机噪音" },
+  { value: "rhythm", label: "简单节奏" },
+  { value: "notes", label: "随机音符" },
+];
 const CODEC_OPTIONS: { value: Codec; label: string }[] = [
   { value: "h264", label: "H.264" },
   { value: "hevc", label: "H.265" },
@@ -26,6 +45,9 @@ const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
 
 const ASPECT_RATIO = 16 / 9; // height / width for 9:16
 
+/** FLV / 3GP 等容器通常只搭配 H.264，不支持在 UI 中选 H.265 */
+const CODEC_HEVC_UNSUPPORTED: VideoFormat[] = ["FLV", "3GP"];
+
 export default function VideoTab({
   config,
   savePath,
@@ -38,6 +60,14 @@ export default function VideoTab({
   const [estimate, setEstimate] = useState("");
   const [lockAspect, setLockAspect] = useState(true);
 
+  const hevcDisabled = CODEC_HEVC_UNSUPPORTED.includes(config.format);
+
+  useEffect(() => {
+    if (hevcDisabled && config.codec === "hevc") {
+      onConfigChange({ codec: "h264" });
+    }
+  }, [hevcDisabled, config.codec, config.format, onConfigChange]);
+
   useEffect(() => {
     onEstimate({
       format: config.format,
@@ -47,6 +77,7 @@ export default function VideoTab({
       fps: config.fps,
       duration: config.duration,
       count: config.count,
+      addAudioTrack: config.addAudioTrack,
     }).then(setEstimate);
   }, [config, onEstimate]);
 
@@ -93,12 +124,19 @@ export default function VideoTab({
       <div className="form-row">
         <label>编码</label>
         <select
-          value={config.codec}
+          value={hevcDisabled ? "h264" : config.codec}
           onChange={(e) => onConfigChange({ codec: e.target.value as Codec })}
           disabled={disabled || generating}
         >
           {CODEC_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
+            <option
+              key={opt.value}
+              value={opt.value}
+              disabled={opt.value === "hevc" && hevcDisabled}
+            >
+              {opt.label}
+              {opt.value === "hevc" && hevcDisabled ? "（当前格式不支持）" : ""}
+            </option>
           ))}
         </select>
       </div>
@@ -166,6 +204,32 @@ export default function VideoTab({
         </select>
       </div>
       <div className="form-row">
+        <label>增加音轨</label>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={config.addAudioTrack}
+            onChange={(e) => onConfigChange({ addAudioTrack: e.target.checked })}
+            disabled={disabled || generating}
+          />
+          为视频添加声音
+        </label>
+      </div>
+      <div className="form-row">
+        <label>音轨内容</label>
+        <select
+          value={config.audioContent}
+          onChange={(e) =>
+            onConfigChange({ audioContent: e.target.value as AudioContentType })
+          }
+          disabled={disabled || generating || !config.addAudioTrack}
+        >
+          {AUDIO_CONTENT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="form-row">
         <label>文件数量</label>
         <input
           type="number"
@@ -176,7 +240,7 @@ export default function VideoTab({
         />
       </div>
       <div className="form-row">
-        <label>前缀</label>
+        <label>文件名前缀</label>
         <input
           type="text"
           value={config.prefix}

@@ -23,6 +23,9 @@ pub struct AudioConfig {
     pub channels: String,
     pub count: u32,
     pub prefix: String,
+    /// noise | rhythm | notes
+    #[serde(default = "default_audio_content")]
+    pub audio_content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +40,11 @@ pub struct VideoConfig {
     pub content_type: String,
     pub count: u32,
     pub prefix: String,
+    #[serde(default)]
+    pub add_audio_track: bool,
+    /// 与音频 tab 一致：noise | rhythm | notes
+    #[serde(default = "default_audio_content")]
+    pub audio_content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,6 +57,10 @@ pub struct AppConfig {
     pub image_config: ImageConfig,
     pub audio_config: AudioConfig,
     pub video_config: VideoConfig,
+}
+
+fn default_audio_content() -> String {
+    "notes".to_string()
 }
 
 impl Default for AppConfig {
@@ -71,6 +83,7 @@ impl Default for AppConfig {
                 channels: "mono".to_string(),
                 count: 10,
                 prefix: "测试音频".to_string(),
+                audio_content: "notes".to_string(),
             },
             video_config: VideoConfig {
                 format: "MP4".to_string(),
@@ -82,6 +95,8 @@ impl Default for AppConfig {
                 content_type: "gradient".to_string(),
                 count: 10,
                 prefix: "测试视频".to_string(),
+                add_audio_track: false,
+                audio_content: "notes".to_string(),
             },
         }
     }
