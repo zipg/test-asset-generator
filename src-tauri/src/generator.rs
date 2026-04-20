@@ -91,7 +91,7 @@ pub fn generate_image(config: &ImageConfig, output_dir: &std::path::Path) -> Res
 
         args.push(output_path.to_str().unwrap().to_string());
 
-        ffmpeg::run_ffmpeg(&args, 30).map_err(|e| format!("{}: {}", filename, e))?;
+        ffmpeg::run_ffmpeg_for_app(None, &args, 30).map_err(|e| format!("{}: {}", filename, e))?;
     }
 
     Ok(())
@@ -136,7 +136,7 @@ pub fn generate_audio(config: &AudioConfig, output_dir: &std::path::Path) -> Res
 
         args.push(output_path.to_str().unwrap().to_string());
 
-        ffmpeg::run_ffmpeg(&args, 10).map_err(|e| format!("{}: {}", filename, e))?;
+        ffmpeg::run_ffmpeg_for_app(None, &args, 10).map_err(|e| format!("{}: {}", filename, e))?;
     }
 
     Ok(())
@@ -195,7 +195,7 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
             output_path.to_str().unwrap().to_string(),
         ];
 
-        ffmpeg::run_ffmpeg(&args, 30).map_err(|e| format!("{}: {}", filename, e))?;
+        ffmpeg::run_ffmpeg_for_app(None, &args, 30).map_err(|e| format!("{}: {}", filename, e))?;
     }
 
     Ok(())

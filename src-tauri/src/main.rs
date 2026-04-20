@@ -9,6 +9,7 @@ use crate::process_ext::command;
 use config::AppConfig;
 use generator::{get_cancel, reset_cancel, set_cancel, random_hex};
 use rand::Rng;
+use std::time::Duration;
 use tauri::Emitter;
 /// Compute MD5 hash of a file
 fn file_md5(path: &std::path::Path) -> Result<String, String> {
@@ -74,8 +75,7 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
     }
 
     if os == "macos" {
-        let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
-        if ffmpeg::bundled_resource_ffmpeg_exists_mac(&app) {
+        if ffmpeg::mac_bundled_ffmpeg_runnable(&app) {
             return "found".to_string();
         }
     }
@@ -149,16 +149,6 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
         }
     }
 
-    // On macOS, always return "found" if homebrew ffmpeg exists in common locations
-    // The sandboxed app may not be able to execute it, but it exists on the system
-    if os == "macos" {
-        if std::path::Path::new("/opt/homebrew/bin/ffmpeg").exists()
-            || std::path::Path::new("/usr/local/bin/ffmpeg").exists()
-        {
-            return "found".to_string();
-        }
-    }
-
     // Windows: typical users have no FFmpeg preinstalled; `download_ffmpeg` installs to AppData
     // on first generate. If we returned `not_found` here, `ffmpegReady` stays false and the UI
     // disables all actions — users could never click Generate to trigger the download (deadlock).
@@ -188,7 +178,14 @@ fn windows_ffmpeg_zip_url_candidates() -> Vec<String> {
 }
 
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
-    let response = reqwest::get(url)
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .connect_timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|e| format!("HTTP client: {}", e))?;
+    let response = client
+        .get(url)
+        .send()
         .await
         .map_err(|e| format!("{}", e))?;
     if !response.status().is_success() {
@@ -212,22 +209,10 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
         let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
     }
 
-    // First check if a valid FFmpeg already exists
-    let existing_path = ffmpeg::get_ffmpeg_path();
+    // First check if a valid FFmpeg already exists (must resolve bundle path on macOS).
+    let existing_path = ffmpeg::resolve_ffmpeg_executable(Some(&app));
     if let Ok(output) = command(&existing_path).arg("--version").output() {
         if output.status.success() {
-            return Ok("already_exists".to_string());
-        }
-    }
-
-    // Must stay consistent with check_ffmpeg(): that command returns "found" on macOS when
-    // Homebrew binaries exist on disk even if this process cannot exec-verify them (e.g. some
-    // GUI environments). Without this branch we always hit the network and reqwest may fail
-    // with "error decoding response body" while the user already has brew ffmpeg.
-    if os == "macos" {
-        if std::path::Path::new("/opt/homebrew/bin/ffmpeg").exists()
-            || std::path::Path::new("/usr/local/bin/ffmpeg").exists()
-        {
             return Ok("already_exists".to_string());
         }
     }
@@ -327,18 +312,7 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
         std::io::copy(&mut file, &mut out)
             .map_err(|e| format!("Failed to write ffmpeg.exe: {}", e))?;
     } else {
-        // macOS
-        let mut ffmpeg_file = std::fs::File::create(&ffmpeg_path)
-            .map_err(|e| format!("Failed to create file: {}", e))?;
-        std::io::copy(&mut std::io::Cursor::new(bytes), &mut ffmpeg_file)
-            .map_err(|e| format!("Failed to write ffmpeg: {}", e))?;
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&ffmpeg_path, std::fs::Permissions::from_mode(0o755))
-                .map_err(|e| format!("Failed to set permissions: {}", e))?;
-        }
+        ffmpeg::install_mac_ffmpeg_from_download_bytes(&bytes, &ffmpeg_path)?;
     }
 
     // Verify the downloaded file is executable
@@ -491,7 +465,7 @@ async fn generate_images(
 
             args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg(&args, 30) {
+            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
@@ -619,7 +593,7 @@ async fn generate_audio(
 
             args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg(&args, 30) {
+            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
@@ -774,7 +748,7 @@ async fn generate_videos(
                 output_path.to_str().unwrap().to_string(),
             ];
 
-            match ffmpeg::run_ffmpeg(&args, 30) {
+            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {

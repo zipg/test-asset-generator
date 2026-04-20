@@ -1,9 +1,11 @@
 use std::env;
+use std::io::{self, Cursor};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::path::BaseDirectory;
+use tauri::AppHandle;
 use tauri::Manager;
 
 use crate::process_ext::command;
@@ -180,7 +182,9 @@ pub fn bundled_ffmpeg_beside_executable_windows() -> Option<PathBuf> {
     None
 }
 
-pub fn get_ffmpeg_path() -> PathBuf {
+/// Resolve FFmpeg binary. Pass `Some(app)` from Tauri commands so macOS can use the bundled
+/// copy inside `Resources/` when the Application Support mirror is missing.
+pub fn resolve_ffmpeg_executable(app: Option<&AppHandle>) -> PathBuf {
     let os = std::env::consts::OS;
     let exe_name = if os == "windows" { "ffmpeg.exe" } else { "ffmpeg" };
 
@@ -207,12 +211,26 @@ pub fn get_ffmpeg_path() -> PathBuf {
         "/usr/local/opt/ffmpeg/bin/ffmpeg",
     ];
 
-    // macOS: prefer our copy under Application Support (bundled or prior download), then system.
+    // macOS: Application Support mirror, then bundle Resources. Release DMGs ship ffmpeg here,
+    // so we return before `which`/Homebrew — system FFmpeg is only a fallback for dev builds
+    // without `resources/ffmpeg`.
     if os == "macos" {
+        if let Some(handle) = app {
+            let _ = ensure_macos_bundled_ffmpeg_copied(handle);
+        }
         if let Some(app_data) = dirs::data_local_dir() {
             let local = app_data.join("Muse_Generator").join("ffmpeg").join(&exe_name);
             if local.exists() {
                 return local;
+            }
+        }
+        if let Some(handle) = app {
+            for rel in ["ffmpeg", "resources/ffmpeg"] {
+                if let Ok(p) = handle.path().resolve(rel, BaseDirectory::Resource) {
+                    if p.exists() {
+                        return p;
+                    }
+                }
             }
         }
         if let Ok(output) = command("/usr/bin/which").arg("ffmpeg").output() {
@@ -234,7 +252,7 @@ pub fn get_ffmpeg_path() -> PathBuf {
 
     // 1. Bundled / downloaded copy in app data (Windows zip extract, or non-mac unix fallback)
     if let Some(app_data) = dirs::data_local_dir() {
-        let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(exe_name);
+        let downloaded = app_data.join("Muse_Generator").join("ffmpeg").join(&exe_name);
         if downloaded.exists() {
             return downloaded;
         }
@@ -264,12 +282,74 @@ pub fn get_ffmpeg_path() -> PathBuf {
     PathBuf::from(exe_name)
 }
 
+/// Evermeet ships a zip; eugeneware static builds are a raw Mach-O. Detect zip by local header.
+pub fn install_mac_ffmpeg_from_download_bytes(bytes: &[u8], dest: &Path) -> Result<(), String> {
+    let is_zip = bytes.len() >= 4
+        && bytes[0] == b'P'
+        && bytes[1] == b'K'
+        && matches!(bytes[2], 3 | 5 | 7)
+        && matches!(bytes[3], 4 | 6 | 8);
+
+    if is_zip {
+        let cursor = Cursor::new(bytes.to_vec());
+        let mut archive =
+            zip::ZipArchive::new(cursor).map_err(|e| format!("Invalid FFmpeg zip: {}", e))?;
+        let mut idx: Option<usize> = None;
+        for i in 0..archive.len() {
+            let file = archive.by_index(i).map_err(|e| e.to_string())?;
+            let name = file.name().replace('\\', "/");
+            if name.contains("__MACOSX") {
+                continue;
+            }
+            if name == "ffmpeg" || name.ends_with("/ffmpeg") {
+                idx = Some(i);
+                break;
+            }
+        }
+        let i = idx.ok_or_else(|| "ffmpeg binary not found inside zip".to_string())?;
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let mut out = std::fs::File::create(dest).map_err(|e| e.to_string())?;
+        io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+    } else {
+        let mut out = std::fs::File::create(dest).map_err(|e| e.to_string())?;
+        io::copy(&mut Cursor::new(bytes), &mut out).map_err(|e| e.to_string())?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// True if the copied bundle binary or Resources binary runs `ffmpeg --version`.
+pub fn mac_bundled_ffmpeg_runnable(app: &AppHandle) -> bool {
+    if std::env::consts::OS != "macos" {
+        return false;
+    }
+    let _ = ensure_macos_bundled_ffmpeg_copied(app);
+    if !bundled_resource_ffmpeg_exists_mac(app) {
+        return false;
+    }
+    let p = resolve_ffmpeg_executable(Some(app));
+    command(&p)
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 pub fn get_ffmpeg_dir() -> Option<PathBuf> {
     dirs::data_local_dir().map(|p| p.join("Muse_Generator").join("ffmpeg"))
 }
 
-pub fn run_ffmpeg(args: &[String], timeout_secs: u64) -> Result<String, String> {
-    let ffmpeg_path = get_ffmpeg_path();
+pub fn run_ffmpeg_for_app(
+    app: Option<&AppHandle>,
+    args: &[String],
+    timeout_secs: u64,
+) -> Result<String, String> {
+    let ffmpeg_path = resolve_ffmpeg_executable(app);
     let timeout = Duration::from_secs(timeout_secs);
 
     let mut child = command(&ffmpeg_path)
@@ -312,3 +392,4 @@ pub fn run_ffmpeg(args: &[String], timeout_secs: u64) -> Result<String, String> 
         }
     }
 }
+
