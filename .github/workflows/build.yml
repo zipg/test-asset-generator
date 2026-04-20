@@ -66,6 +66,9 @@ jobs:
         run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.macos.bundle.json
         env:
           CARGO_INCREMENTAL: 0
+          # 新版 Actions macOS 上 Finder/AppleScript 美化 DMG 易超时导致 bundle_dmg.sh 失败
+          #（见 https://github.com/tauri-apps/tauri-action/issues/1091 ）。设为 false 在 CI 走 skip 路径，DMG 仍可用。
+          TAURI_BUNDLER_DMG_IGNORE_CI: "false"
 
       - name: Add README to macOS DMG
         if: matrix.platform == 'macos-latest'
