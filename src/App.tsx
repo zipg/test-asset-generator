@@ -24,6 +24,7 @@ export default function App() {
     estimateSize,
     downloading,
     ffmpegReady,
+    hostOs,
     downloadFFmpeg,
     generateImages,
     generateAudio,
@@ -156,7 +157,19 @@ export default function App() {
       <TabBar active={activeTab} onChange={handleTabChange} disabled={isDisabled} />
       {!ffmpegReady && (
         <div className="ffmpeg-warning">
-          ⚠️ 未检测到可用的 FFmpeg。macOS 可安装 Homebrew 后执行 <code>brew install ffmpeg</code>；Windows 需可写入用户目录且联网，以便首次生成时自动下载。
+          {hostOs === "macos" ? (
+            <>
+              ⚠️ 未检测到可用的 FFmpeg。正式安装包一般已内置；若仍出现本提示，请确认使用完整 DMG 安装，或删除{" "}
+              <code>~/Library/Application Support/Muse_Generator/ffmpeg</code> 后重开应用。无内置时可通过 Homebrew 安装：{" "}
+              <code>brew install ffmpeg</code>。
+            </>
+          ) : hostOs === "windows" ? (
+            <>
+              ⚠️ 未检测到可用的 FFmpeg。请保证用户目录可写且网络可用，以便首次生成时自动下载；或将 FFmpeg 加入系统 PATH。
+            </>
+          ) : (
+            <>⚠️ 未检测到可用的 FFmpeg。请在系统中安装 FFmpeg 并加入 PATH。</>
+          )}
         </div>
       )}
       <div className="tab-content">

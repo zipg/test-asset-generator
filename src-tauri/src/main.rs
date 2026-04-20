@@ -58,9 +58,16 @@ fn main() {
             estimate_size,
             download_ffmpeg,
             check_ffmpeg,
+            host_os,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Returns `std::env::consts::OS` (e.g. `macos`, `windows`, `linux`) for UI copy.
+#[tauri::command]
+fn host_os() -> String {
+    std::env::consts::OS.to_string()
 }
 
 #[tauri::command]
@@ -74,8 +81,11 @@ fn check_ffmpeg(app: tauri::AppHandle) -> String {
         }
     }
 
+    // macOS: same idea as Windows — if the .app ships ffmpeg, treat as ready without exec probe
+    // (GUI/spawn checks can false-negative while the bundled binary is valid).
     if os == "macos" {
-        if ffmpeg::mac_bundled_ffmpeg_runnable(&app) {
+        let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
+        if ffmpeg::bundled_resource_ffmpeg_exists_mac(&app) {
             return "found".to_string();
         }
     }
@@ -207,6 +217,9 @@ async fn download_ffmpeg(app: tauri::AppHandle) -> Result<String, String> {
     }
     if os == "macos" {
         let _ = ffmpeg::ensure_macos_bundled_ffmpeg_copied(&app);
+        if ffmpeg::bundled_resource_ffmpeg_exists_mac(&app) {
+            return Ok("already_exists".to_string());
+        }
     }
 
     // First check if a valid FFmpeg already exists (must resolve bundle path on macOS).

@@ -71,19 +71,46 @@ pub fn bundled_resource_ffmpeg_exists(app: &tauri::AppHandle) -> bool {
     false
 }
 
-/// True if the macOS app bundle ships `ffmpeg` under Resources (see `tauri.macos.bundle.json`).
-pub fn bundled_resource_ffmpeg_exists_mac(app: &tauri::AppHandle) -> bool {
-    if std::env::consts::OS != "macos" {
-        return false;
+fn push_unique_mac_path(out: &mut Vec<PathBuf>, p: PathBuf) {
+    if p.as_os_str().is_empty() {
+        return;
     }
-    for rel in ["ffmpeg", "resources/ffmpeg"] {
+    if !out.iter().any(|x| x == &p) {
+        out.push(p);
+    }
+}
+
+/// Candidate paths for the bundled macOS `ffmpeg` (Tauri may place `bundle.resources` differently).
+pub fn mac_bundled_ffmpeg_resource_paths(app: &tauri::AppHandle) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if std::env::consts::OS != "macos" {
+        return paths;
+    }
+    for rel in ["resources/ffmpeg", "ffmpeg"] {
         if let Ok(p) = app.path().resolve(rel, BaseDirectory::Resource) {
-            if p.exists() {
-                return true;
+            push_unique_mac_path(&mut paths, p);
+        }
+    }
+    if let Ok(dir) = app.path().resource_dir() {
+        push_unique_mac_path(&mut paths, dir.join("resources/ffmpeg"));
+        push_unique_mac_path(&mut paths, dir.join("ffmpeg"));
+        if let Ok(read) = std::fs::read_dir(&dir) {
+            for ent in read.flatten() {
+                let p = ent.path();
+                if p.is_file() && p.file_name().and_then(|n| n.to_str()) == Some("ffmpeg") {
+                    push_unique_mac_path(&mut paths, p);
+                }
             }
         }
     }
-    false
+    paths
+}
+
+/// True if the macOS app bundle ships `ffmpeg` under Resources (see `tauri.macos.bundle.json`).
+pub fn bundled_resource_ffmpeg_exists_mac(app: &tauri::AppHandle) -> bool {
+    mac_bundled_ffmpeg_resource_paths(app)
+        .iter()
+        .any(|p| p.exists())
 }
 
 /// Copy shipped `resources/ffmpeg.exe` from the app bundle to LocalAppData (first run / repair).
@@ -130,26 +157,22 @@ pub fn ensure_macos_bundled_ffmpeg_copied(app: &tauri::AppHandle) -> Result<(), 
     if std::env::consts::OS != "macos" {
         return Ok(());
     }
-    for rel in ["ffmpeg", "resources/ffmpeg"] {
-        let src = match app.path().resolve(rel, BaseDirectory::Resource) {
-            Ok(p) => p,
-            Err(_) => continue,
-        };
+    let Some(dest_dir) = get_ffmpeg_dir() else {
+        return Ok(());
+    };
+    let dest = dest_dir.join("ffmpeg");
+    let need_copy = !dest.exists()
+        || command(&dest)
+            .arg("--version")
+            .output()
+            .map(|o| !o.status.success())
+            .unwrap_or(true);
+    if !need_copy {
+        return Ok(());
+    }
+    for src in mac_bundled_ffmpeg_resource_paths(app) {
         if !src.exists() {
             continue;
-        }
-        let Some(dest_dir) = get_ffmpeg_dir() else {
-            return Ok(());
-        };
-        let dest = dest_dir.join("ffmpeg");
-        let need_copy = !dest.exists()
-            || command(&dest)
-                .arg("--version")
-                .output()
-                .map(|o| !o.status.success())
-                .unwrap_or(true);
-        if !need_copy {
-            return Ok(());
         }
         std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
         std::fs::copy(&src, &dest).map_err(|e| {
@@ -225,11 +248,9 @@ pub fn resolve_ffmpeg_executable(app: Option<&AppHandle>) -> PathBuf {
             }
         }
         if let Some(handle) = app {
-            for rel in ["ffmpeg", "resources/ffmpeg"] {
-                if let Ok(p) = handle.path().resolve(rel, BaseDirectory::Resource) {
-                    if p.exists() {
-                        return p;
-                    }
+            for p in mac_bundled_ffmpeg_resource_paths(handle) {
+                if p.exists() {
+                    return p;
                 }
             }
         }
@@ -321,23 +342,6 @@ pub fn install_mac_ffmpeg_from_download_bytes(bytes: &[u8], dest: &Path) -> Resu
             .map_err(|e| e.to_string())?;
     }
     Ok(())
-}
-
-/// True if the copied bundle binary or Resources binary runs `ffmpeg --version`.
-pub fn mac_bundled_ffmpeg_runnable(app: &AppHandle) -> bool {
-    if std::env::consts::OS != "macos" {
-        return false;
-    }
-    let _ = ensure_macos_bundled_ffmpeg_copied(app);
-    if !bundled_resource_ffmpeg_exists_mac(app) {
-        return false;
-    }
-    let p = resolve_ffmpeg_executable(Some(app));
-    command(&p)
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
 }
 
 pub fn get_ffmpeg_dir() -> Option<PathBuf> {

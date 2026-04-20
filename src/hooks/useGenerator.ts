@@ -7,12 +7,16 @@ export function useGenerator() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [ffmpegReady, setFfmpegReady] = useState(true);
+  const [hostOs, setHostOs] = useState<string>("unknown");
 
   useEffect(() => {
-    // Check FFmpeg status at startup
-    invoke<string>("check_ffmpeg").then((status) => {
+    Promise.all([
+      invoke<string>("host_os").catch(() => "unknown"),
+      invoke<string>("check_ffmpeg").catch(() => "not_found"),
+    ]).then(([os, status]) => {
+      setHostOs(os);
       setFfmpegReady(status === "found");
-    }).catch(() => setFfmpegReady(false));
+    });
 
     invoke<AppConfig>("get_config")
       .then((cfg) => setConfig(cfg))
@@ -120,6 +124,7 @@ export function useGenerator() {
     loading,
     downloading,
     ffmpegReady,
+    hostOs,
     estimateSize,
     selectPath,
     downloadFFmpeg,
