@@ -522,7 +522,6 @@ async fn generate_images(
                         Err(e) => {
                             failed += 1;
                             errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
-                            generated = true;
                             break;
                         }
                     }
@@ -530,7 +529,6 @@ async fn generate_images(
                 Err(e) => {
                     failed += 1;
                     errors.push(serde_json::json!({ "file": filename, "error": e }));
-                    generated = true;
                     break;
                 }
             }
@@ -656,7 +654,6 @@ async fn generate_audio(
                         Err(e) => {
                             failed += 1;
                             errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
-                            generated = true;
                             break;
                         }
                     }
@@ -664,7 +661,6 @@ async fn generate_audio(
                 Err(e) => {
                     failed += 1;
                     errors.push(serde_json::json!({ "file": filename, "error": e }));
-                    generated = true;
                     break;
                 }
             }
@@ -946,7 +942,6 @@ async fn generate_videos(
                         Err(e) => {
                             failed += 1;
                             errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
-                            generated = true;
                             break;
                         }
                     }
@@ -954,7 +949,6 @@ async fn generate_videos(
                 Err(e) => {
                     failed += 1;
                     errors.push(serde_json::json!({ "file": filename, "error": e }));
-                    generated = true;
                     break;
                 }
             }

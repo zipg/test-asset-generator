@@ -38,11 +38,12 @@ pub fn build_lavfi_audio(
             )
         }
         "notes" => {
+            // lavfi 中表达式里的逗号会拆成多段滤镜，必须写成 \,
             let m1 = (seed % 12) as f64;
             let m2 = ((seed / 12) % 12) as f64;
             let rate = 2.2 + (seed % 180) as f64 * 0.01;
             format!(
-                "aevalsrc=0.14*sin(2*PI*220*pow(1.059463094359,mod(floor(t*({rate}))+{m1}+{m2},12))*t):d={}:s={}:c=mono",
+                "aevalsrc=0.14*sin(2*PI*220*pow(1.059463094359\\,mod(floor(t*({rate}))+{m1}+{m2}\\,12))*t):d={}:s={}:c=mono",
                 dur, sr
             )
         }

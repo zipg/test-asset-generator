@@ -26,7 +26,9 @@ const FORMAT_OPTIONS: VideoFormat[] = [
   "MKV",
   "3GP",
 ];
-const AUDIO_CONTENT_OPTIONS: { value: AudioContentType; label: string }[] = [
+/** 无 = 不混音；其余与音频 Tab 三种内容一致 */
+const EMBEDDED_AUDIO_OPTIONS: { value: "none" | AudioContentType; label: string }[] = [
+  { value: "none", label: "无" },
   { value: "noise", label: "随机噪音" },
   { value: "rhythm", label: "简单节奏" },
   { value: "notes", label: "随机音符" },
@@ -204,27 +206,23 @@ export default function VideoTab({
         </select>
       </div>
       <div className="form-row">
-        <label>增加音轨</label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
-            checked={config.addAudioTrack}
-            onChange={(e) => onConfigChange({ addAudioTrack: e.target.checked })}
-            disabled={disabled || generating}
-          />
-          为视频添加声音
-        </label>
-      </div>
-      <div className="form-row">
-        <label>音轨内容</label>
+        <label>增加音频</label>
         <select
-          value={config.audioContent}
-          onChange={(e) =>
-            onConfigChange({ audioContent: e.target.value as AudioContentType })
-          }
-          disabled={disabled || generating || !config.addAudioTrack}
+          value={config.addAudioTrack ? config.audioContent : "none"}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "none") {
+              onConfigChange({ addAudioTrack: false });
+            } else {
+              onConfigChange({
+                addAudioTrack: true,
+                audioContent: v as AudioContentType,
+              });
+            }
+          }}
+          disabled={disabled || generating}
         >
-          {AUDIO_CONTENT_OPTIONS.map((opt) => (
+          {EMBEDDED_AUDIO_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
