@@ -16,8 +16,12 @@ export type VideoFormat =
   | "MKV"
   | "3GP";
 export type ContentType = "solid" | "gradient" | "pattern" | "noise";
-/** 音频内容：随机噪音 / 简单节奏 / 随机音符 */
-export type AudioContentType = "noise" | "rhythm" | "notes";
+/** 音频内容：随机噪音 / 简单节奏 / 随机音符 / 随机音乐（古典动机循环） */
+export type AudioContentType =
+  | "noise"
+  | "rhythm"
+  | "notes"
+  | "random_music";
 export type Codec = "h264" | "hevc";
 export type SampleRate = 44100 | 48000;
 export type Channels = "mono" | "stereo";

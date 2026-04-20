@@ -64,10 +64,14 @@ pub fn build_lavfi_audio_for_video(content: &str, duration_secs: f64, seed: u32)
 }
 
 pub fn needs_stereo_upmix_video(content: &str) -> bool {
-    matches!(content, "rhythm" | "notes")
+    matches!(content, "rhythm" | "notes" | "random_music")
 }
 
 /// 若 lavfi 为单声道而需要立体声，返回 true（需在编码前加 `-ac 2`）。
 pub fn needs_stereo_upmix(content: &str, channels: &str) -> bool {
-    channels == "stereo" && (content == "rhythm" || content == "notes")
+    channels == "stereo"
+        && matches!(
+            content,
+            "rhythm" | "notes" | "random_music"
+        )
 }

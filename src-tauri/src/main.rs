@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio_lavfi;
+mod audio_music;
 mod config;
 mod ffmpeg;
 mod generator;
@@ -609,21 +610,33 @@ async fn generate_audio(
 
             let seed: u32 = unique_seed();
 
-            let lavfi = audio_lavfi::build_lavfi_audio(
-                &config.audio_content,
-                config.duration,
-                config.sample_rate,
-                &config.channels,
-                seed,
-            );
+            let mut args: Vec<String> = vec!["-y".to_string()];
 
-            let mut args: Vec<String> = vec![
-                "-f".to_string(),
-                "lavfi".to_string(),
-                "-i".to_string(),
-                lavfi,
-                "-y".to_string(),
-            ];
+            if config.audio_content == "random_music" {
+                let sines = audio_music::sine_inputs(seed, config.sample_rate);
+                for s in sines.iter() {
+                    args.push("-f".to_string());
+                    args.push("lavfi".to_string());
+                    args.push("-i".to_string());
+                    args.push(s.clone());
+                }
+                args.push("-filter_complex".to_string());
+                args.push(audio_music::filter_concat_loop_atrim(config.duration));
+                args.push("-map".to_string());
+                args.push("[aout]".to_string());
+            } else {
+                let lavfi = audio_lavfi::build_lavfi_audio(
+                    &config.audio_content,
+                    config.duration,
+                    config.sample_rate,
+                    &config.channels,
+                    seed,
+                );
+                args.push("-f".to_string());
+                args.push("lavfi".to_string());
+                args.push("-i".to_string());
+                args.push(lavfi);
+            }
 
             if audio_lavfi::needs_stereo_upmix(&config.audio_content, &config.channels) {
                 args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
@@ -636,7 +649,13 @@ async fn generate_audio(
 
             args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
+            let timeout_audio = if config.audio_content == "random_music" {
+                90_u64
+            } else {
+                30_u64
+            };
+
+            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, timeout_audio) {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {
@@ -797,28 +816,55 @@ async fn generate_videos(
             let mut args: Vec<String> = vec!["-y".to_string()];
 
             if config.add_audio_track {
-                let audio_lavfi = audio_lavfi::build_lavfi_audio_for_video(
-                    &config.audio_content,
-                    config.duration,
-                    seed,
-                );
-                args.extend_from_slice(&[
-                    "-f".to_string(),
-                    "lavfi".to_string(),
-                    "-i".to_string(),
-                    filter.clone(),
-                    "-f".to_string(),
-                    "lavfi".to_string(),
-                    "-i".to_string(),
-                    audio_lavfi,
-                    "-map".to_string(),
-                    "0:v".to_string(),
-                    "-map".to_string(),
-                    "1:a".to_string(),
-                    "-shortest".to_string(),
-                ]);
-                if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
-                    args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
+                if config.audio_content == "random_music" {
+                    let sines = audio_music::sine_inputs(seed, 48_000);
+                    args.extend_from_slice(&[
+                        "-f".to_string(),
+                        "lavfi".to_string(),
+                        "-i".to_string(),
+                        filter.clone(),
+                    ]);
+                    for s in sines.iter() {
+                        args.push("-f".to_string());
+                        args.push("lavfi".to_string());
+                        args.push("-i".to_string());
+                        args.push(s.clone());
+                    }
+                    args.push("-filter_complex".to_string());
+                    args.push(audio_music::filter_video_music_track(config.duration));
+                    args.extend_from_slice(&[
+                        "-map".to_string(),
+                        "0:v".to_string(),
+                        "-map".to_string(),
+                        "[mus]".to_string(),
+                    ]);
+                    if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
+                        args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
+                    }
+                } else {
+                    let audio_lavfi = audio_lavfi::build_lavfi_audio_for_video(
+                        &config.audio_content,
+                        config.duration,
+                        seed,
+                    );
+                    args.extend_from_slice(&[
+                        "-f".to_string(),
+                        "lavfi".to_string(),
+                        "-i".to_string(),
+                        filter.clone(),
+                        "-f".to_string(),
+                        "lavfi".to_string(),
+                        "-i".to_string(),
+                        audio_lavfi,
+                        "-map".to_string(),
+                        "0:v".to_string(),
+                        "-map".to_string(),
+                        "1:a".to_string(),
+                        "-shortest".to_string(),
+                    ]);
+                    if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
+                        args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
+                    }
                 }
                 match vcodec {
                     "libvpx-vp9" => {
@@ -920,7 +966,12 @@ async fn generate_videos(
                 } else {
                     45.0
                 };
-                let t = base + config.duration * 3.0;
+                let extra = if config.add_audio_track && config.audio_content == "random_music" {
+                    60.0
+                } else {
+                    0.0
+                };
+                let t = base + config.duration * 3.0 + extra;
                 t.min(900.0).max(25.0) as u64
             };
 

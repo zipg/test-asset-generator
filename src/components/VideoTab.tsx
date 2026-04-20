@@ -32,6 +32,7 @@ const EMBEDDED_AUDIO_OPTIONS: { value: "none" | AudioContentType; label: string 
   { value: "noise", label: "随机噪音" },
   { value: "rhythm", label: "简单节奏" },
   { value: "notes", label: "随机音符" },
+  { value: "random_music", label: "随机音乐" },
 ];
 const CODEC_OPTIONS: { value: Codec; label: string }[] = [
   { value: "h264", label: "H.264" },
