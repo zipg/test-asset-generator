@@ -55,6 +55,7 @@ fn main() {
             generate_audio,
             generate_videos,
             select_save_path,
+            open_folder,
             estimate_size,
             download_ffmpeg,
             check_ffmpeg,
@@ -364,6 +365,19 @@ fn reset_cancelled() {
 #[tauri::command]
 fn set_cancelled(val: bool) {
     set_cancel(val);
+}
+
+/// 在系统文件管理器中打开目录（macOS Finder / Windows 资源管理器）。
+#[tauri::command]
+fn open_folder(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if !p.exists() {
+        return Err("路径不存在".to_string());
+    }
+    if !p.is_dir() {
+        return Err("不是目录".to_string());
+    }
+    open::that(&path).map_err(|e| format!("无法打开目录: {}", e))
 }
 
 #[tauri::command]
@@ -826,8 +840,8 @@ async fn generate_videos(
 }
 
 fn create_timestamp_dir(base: &str, prefix: &str) -> Result<std::path::PathBuf, String> {
-    // 使用系统本地时区（国内 Mac 一般为北京时间），避免原先 UTC + 错误“月日”推算
-    let stamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    // 使用系统本地时区（国内 Mac 一般为北京时间）；格式为 MMDD_HHmmss
+    let stamp = chrono::Local::now().format("%m%d_%H%M%S").to_string();
     let dir_name = format!("{}_{}", prefix, stamp);
     let dir = std::path::PathBuf::from(base).join(&dir_name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;

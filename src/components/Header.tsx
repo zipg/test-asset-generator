@@ -1,4 +1,5 @@
 import { useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 interface Props {
@@ -14,6 +15,16 @@ export default function Header({ savePath, onPathChange }: Props) {
     }
   }, [onPathChange]);
 
+  const handleGoToFolder = useCallback(async () => {
+    if (!savePath) return;
+    try {
+      await invoke("open_folder", { path: savePath });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      window.alert(msg);
+    }
+  }, [savePath]);
+
   return (
     <header className="header">
       <div className="path-row">
@@ -23,6 +34,14 @@ export default function Header({ savePath, onPathChange }: Props) {
         </span>
         <button className="btn-small" onClick={handleSelect}>
           选择
+        </button>
+        <button
+          type="button"
+          className="btn-small"
+          disabled={!savePath}
+          onClick={handleGoToFolder}
+        >
+          前往
         </button>
       </div>
     </header>

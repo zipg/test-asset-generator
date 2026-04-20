@@ -92,8 +92,13 @@ body {
   transition: background 0.15s;
 }
 
-.btn-small:hover {
+.btn-small:hover:not(:disabled) {
   background: #5a5a5c;
+}
+
+.btn-small:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .btn-primary {

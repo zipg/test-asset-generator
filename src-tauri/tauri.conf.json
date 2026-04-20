@@ -14,7 +14,9 @@
       {
         "title": "Muse测试素材生成器",
         "width": 560,
-        "height": 600,
+        "height": 625,
+        "minWidth": 560,
+        "maxWidth": 560,
         "resizable": true,
         "center": true
       }
