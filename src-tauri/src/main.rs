@@ -650,7 +650,7 @@ async fn generate_audio(
             args.push(output_path.to_str().unwrap().to_string());
 
             let timeout_audio = if config.audio_content == "random_music" {
-                90_u64
+                150_u64
             } else {
                 30_u64
             };
@@ -967,7 +967,7 @@ async fn generate_videos(
                     45.0
                 };
                 let extra = if config.add_audio_track && config.audio_content == "random_music" {
-                    60.0
+                    90.0
                 } else {
                     0.0
                 };
