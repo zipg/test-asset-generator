@@ -53,9 +53,10 @@ pub struct MusicConfig {
     pub format: String,
     pub duration: f64,
     pub bpm: u32,
-    pub melody: String, // scale | arpeggio | folk | random
+    pub melody: String,
     pub count: u32,
     pub prefix: String,
+    pub use_fluidsynth: bool, // 是否使用 FluidSynth 渲染
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +89,7 @@ fn default_music_config() -> MusicConfig {
         melody: "scale".to_string(),
         count: 10,
         prefix: "音乐".to_string(),
+        use_fluidsynth: false, // 默认使用 FFmpeg sine
     }
 }
 

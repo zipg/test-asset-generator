@@ -127,6 +127,17 @@ export default function MusicTab({
           disabled={disabled || generating}
         />
       </div>
+      <div className="form-row">
+        <label>
+          <input
+            type="checkbox"
+            checked={config.useFluidsynth}
+            onChange={(e) => onConfigChange({ useFluidsynth: e.target.checked })}
+            disabled={disabled || generating}
+          />
+          {" "}使用 FluidSynth（真实乐器音色，需要 SoundFont）
+        </label>
+      </div>
       <div className="estimate-row">
         <span>预计体积: {estimate}</span>
         <span>{config.count} 个文件</span>

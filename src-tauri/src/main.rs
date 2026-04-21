@@ -6,6 +6,8 @@ mod config;
 mod ffmpeg;
 mod generator;
 mod melody;
+mod music_library;
+mod fluidsynth_render;
 mod process_ext;
 
 use crate::process_ext::command;

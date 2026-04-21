@@ -219,12 +219,56 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
         let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
 
-        // 获取旋律模板
-        let melody = melody::get_melody_by_template(&config.melody);
-        
+        // 获取旋律模板（优先从音乐库获取）
+        let melody = if let Some(notes) = crate::music_library::get_music_by_id(&config.melody) {
+            notes
+        } else {
+            melody::get_melody_by_template(&config.melody)
+        };
+
         // 随机移调 -6 到 +6 半音
         let transpose_semitones = rand::thread_rng().gen_range(-6..=6);
         let transposed = melody::transpose(&melody, transpose_semitones);
+
+        // 如果启用 FluidSynth 且 SoundFont 可用，使用 FluidSynth 渲染
+        if config.use_fluidsynth {
+            if let Some(soundfont_path) = crate::fluidsynth_render::check_soundfont_exists() {
+                let temp_wav = output_dir.join(format!("temp_{}.wav", random_str));
+
+                match crate::fluidsynth_render::render_with_fluidsynth(
+                    &transposed,
+                    config.bpm,
+                    config.duration,
+                    &soundfont_path,
+                    &temp_wav,
+                    44100,
+                ) {
+                    Ok(_) => {
+                        // 如果需要转换格式，使用 FFmpeg
+                        if ext != "wav" {
+                            let codec = if ext == "aac" { "aac" } else { "libmp3lame" };
+                            let args = vec![
+                                "-i".to_string(), temp_wav.to_str().unwrap().to_string(),
+                                "-acodec".to_string(), codec.to_string(),
+                                "-y".to_string(),
+                                output_path.to_str().unwrap().to_string(),
+                            ];
+                            crate::ffmpeg::run_ffmpeg_for_app(None, &args, 30)?;
+                            let _ = std::fs::remove_file(&temp_wav);
+                        } else {
+                            std::fs::rename(&temp_wav, &output_path).map_err(|e| e.to_string())?;
+                        }
+                        continue; // 成功，跳到下一个文件
+                    }
+                    Err(e) => {
+                        // FluidSynth 失败，回退到 FFmpeg
+                        eprintln!("FluidSynth failed: {}, falling back to FFmpeg", e);
+                    }
+                }
+            }
+        }
+
+        // 使用 FFmpeg sine 滤镜渲染（默认或回退）
 
         // 计算每个音符的时长（秒）
         let beat_duration = 60.0 / config.bpm as f64; // 每拍的秒数

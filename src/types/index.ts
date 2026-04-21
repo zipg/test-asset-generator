@@ -79,6 +79,7 @@ export interface MusicConfig {
   melody: MelodyTemplate;
   count: number;
   prefix: string;
+  useFluidsynth: boolean;
 }
 
 export interface AppConfig {
