@@ -1,5 +1,5 @@
 **界面预览**
-<img width="2560" height="1594" alt="image" src="https://github.com/user-attachments/assets/c83cd418-dcee-4d2d-8cc8-ce56be691396" />
+<img width="1280" height="797" alt="image" src="https://github.com/user-attachments/assets/c83cd418-dcee-4d2d-8cc8-ce56be691396" />
 
 
 **技术架构**
