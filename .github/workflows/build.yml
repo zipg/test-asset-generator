@@ -55,6 +55,10 @@ jobs:
         shell: bash
         run: bash scripts/fetch-ffmpeg-macos.sh "${{ matrix.target }}"
 
+      - name: Fetch SoundFont bundle
+        shell: bash
+        run: bash src-tauri/scripts/fetch-soundfont.sh
+
       - name: Build Tauri app (Windows)
         if: matrix.platform == 'windows-latest'
         run: npm run tauri -- build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config src-tauri/tauri.windows.bundle.json
