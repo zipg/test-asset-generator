@@ -11,6 +11,7 @@ export default function TabBar({ active, onChange, disabled }: Props) {
     { key: "video", label: "视频" },
     { key: "image", label: "图片" },
     { key: "audio", label: "音频" },
+    { key: "music", label: "音乐 (实验)" },
   ];
 
   return (

@@ -25,7 +25,7 @@ export type AudioContentType =
 export type Codec = "h264" | "hevc";
 export type SampleRate = 44100 | 48000;
 export type Channels = "mono" | "stereo";
-export type MediaType = "image" | "audio" | "video";
+export type MediaType = "image" | "audio" | "video" | "music";
 
 export interface ImageConfig {
   format: ImageFormat;
@@ -60,6 +60,17 @@ export interface VideoConfig {
   audioContent: AudioContentType;
 }
 
+export type MelodyTemplate = "scale" | "arpeggio" | "folk" | "random";
+
+export interface MusicConfig {
+  format: AudioFormat;
+  duration: number;
+  bpm: number;
+  melody: MelodyTemplate;
+  count: number;
+  prefix: string;
+}
+
 export interface AppConfig {
   /** Persisted by Rust; omit on old clients — do not strip when saving. */
   schemaVersion?: number;
@@ -67,6 +78,7 @@ export interface AppConfig {
   imageConfig: ImageConfig;
   audioConfig: AudioConfig;
   videoConfig: VideoConfig;
+  musicConfig: MusicConfig;
 }
 
 export interface ProgressPayload {

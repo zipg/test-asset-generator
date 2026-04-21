@@ -118,6 +118,25 @@ export function useGenerator() {
     await invoke("set_cancelled", { val: true });
   }, []);
 
+  const generateMusic = useCallback(
+    async (
+      musicConfig: Record<string, unknown>,
+      savePath: string
+    ): Promise<TaskResult> => {
+      setLoading(true);
+      try {
+        const result = await invoke<TaskResult>("generate_music", {
+          config: musicConfig,
+          savePath,
+        });
+        return result;
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
   return {
     config,
     updateConfig,
@@ -131,6 +150,7 @@ export function useGenerator() {
     generateImages,
     generateAudio,
     generateVideos,
+    generateMusic,
     cancelGeneration,
   };
 }

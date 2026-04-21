@@ -49,6 +49,17 @@ pub struct VideoConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MusicConfig {
+    pub format: String,
+    pub duration: f64,
+    pub bpm: u32,
+    pub melody: String, // scale | arpeggio | folk | random
+    pub count: u32,
+    pub prefix: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppConfig {
     /// Bumps when defaults change so we can migrate persisted JSON once.
     #[serde(default)]
@@ -57,6 +68,8 @@ pub struct AppConfig {
     pub image_config: ImageConfig,
     pub audio_config: AudioConfig,
     pub video_config: VideoConfig,
+    #[serde(default = "default_music_config")]
+    pub music_config: MusicConfig,
 }
 
 fn default_audio_content() -> String {
@@ -65,6 +78,17 @@ fn default_audio_content() -> String {
 
 fn default_add_audio_track() -> bool {
     true
+}
+
+fn default_music_config() -> MusicConfig {
+    MusicConfig {
+        format: "MP3".to_string(),
+        duration: 30.0,
+        bpm: 120,
+        melody: "scale".to_string(),
+        count: 10,
+        prefix: "音乐".to_string(),
+    }
 }
 
 impl Default for AppConfig {
@@ -102,6 +126,7 @@ impl Default for AppConfig {
                 add_audio_track: true,
                 audio_content: "random_music".to_string(),
             },
+            music_config: default_music_config(),
         }
     }
 }

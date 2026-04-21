@@ -1,4 +1,5 @@
-use crate::config::{AudioConfig, ImageConfig, VideoConfig};
+use crate::config::{AudioConfig, ImageConfig, VideoConfig, MusicConfig};
+use crate::melody;
 use crate::ffmpeg;
 use rand::Rng;
 
@@ -196,6 +197,80 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
         ];
 
         ffmpeg::run_ffmpeg_for_app(None, &args, 30).map_err(|e| format!("{}: {}", filename, e))?;
+    }
+
+    Ok(())
+}
+
+pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Result<(), String> {
+    let ext = match config.format.as_str() {
+        "WAV" | "wav" => "wav",
+        "AAC" | "aac" => "aac",
+        _ => "mp3",
+    };
+    let duration_str = format_duration(config.duration);
+
+    for i in 1..=config.count {
+        if get_cancel() {
+            return Err("Cancelled".to_string());
+        }
+
+        let random_str = random_hex(6);
+        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+        let output_path = output_dir.join(&filename);
+
+        // 获取旋律模板
+        let melody = melody::get_melody_by_template(&config.melody);
+        
+        // 随机移调 -6 到 +6 半音
+        let transpose_semitones = rand::thread_rng().gen_range(-6..=6);
+        let transposed = melody::transpose(&melody, transpose_semitones);
+
+        // 计算每个音符的时长（秒）
+        let beat_duration = 60.0 / config.bpm as f64; // 每拍的秒数
+        
+        // 计算总时长并调整以匹配目标时长
+        let total_beats: f32 = transposed.iter().map(|(_, dur)| dur).sum();
+        let scale_factor = config.duration / (total_beats as f64 * beat_duration);
+
+        // 构建 FFmpeg sine 滤镜链
+        let mut filter_parts = Vec::new();
+        let mut current_time = 0.0;
+
+        for (freq, duration) in &transposed {
+            let note_duration = (*duration as f64 * beat_duration * scale_factor).max(0.05);
+            
+            // 为每个音符创建一个 sine 滤镜
+            filter_parts.push(format!(
+                "sine=frequency={}:duration={}",
+                freq, note_duration
+            ));
+            
+            current_time += note_duration;
+        }
+
+        // 使用 concat 滤镜连接所有音符
+        let filter = if filter_parts.len() > 1 {
+            format!("{}|concat=n={}:v=0:a=1", filter_parts.join("|"), filter_parts.len())
+        } else {
+            filter_parts[0].clone()
+        };
+
+        let mut args: Vec<String> = vec![
+            "-f".to_string(), "lavfi".to_string(),
+            "-i".to_string(), filter,
+            "-t".to_string(), duration_str.clone(),
+            "-y".to_string(),
+        ];
+
+        if ext != "wav" {
+            let codec = if ext == "aac" { "aac" } else { "libmp3lame" };
+            args.extend_from_slice(&["-acodec".to_string(), codec.to_string()]);
+        }
+
+        args.push(output_path.to_str().unwrap().to_string());
+
+        crate::ffmpeg::run_ffmpeg_for_app(None, &args, 30).map_err(|e| format!("{}: {}", filename, e))?;
     }
 
     Ok(())

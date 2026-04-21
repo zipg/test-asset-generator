@@ -5,6 +5,7 @@ mod audio_music;
 mod config;
 mod ffmpeg;
 mod generator;
+mod melody;
 mod process_ext;
 
 use crate::process_ext::command;
@@ -56,6 +57,7 @@ fn main() {
             generate_images,
             generate_audio,
             generate_videos,
+            generate_music,
             select_save_path,
             open_folder,
             estimate_size,
@@ -1100,4 +1102,63 @@ fn format_duration(secs: f64) -> String {
     } else {
         format!("{:.2}", secs)
     }
+}
+
+#[tauri::command]
+async fn generate_music(
+    app: tauri::AppHandle,
+    config: config::MusicConfig,
+    save_path: String,
+) -> Result<serde_json::Value, String> {
+    reset_cancel();
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
+
+    let total = config.count;
+    let mut success = 0u32;
+    let mut failed = 0u32;
+    let mut errors: Vec<serde_json::Value> = Vec::new();
+
+    let start_time = std::time::Instant::now();
+
+    for i in 1..=total {
+        if get_cancel() {
+            break;
+        }
+
+        let elapsed = start_time.elapsed().as_secs_f64();
+        let avg_time_per_file = if success + failed > 0 {
+            elapsed / (success + failed) as f64
+        } else {
+            0.0
+        };
+        let remaining = total - (success + failed);
+        let estimated_remaining = avg_time_per_file * remaining as f64;
+
+        let _ = app.emit(
+            "generation-progress",
+            serde_json::json!({
+                "current": success + failed,
+                "total": total,
+                "currentFile": format!("{}_{:03}", config.prefix, i),
+                "estimatedRemainingSecs": estimated_remaining,
+            }),
+        );
+
+        match generator::generate_music(&config, &output_dir) {
+            Ok(_) => success += 1,
+            Err(e) => {
+                failed += 1;
+                errors.push(serde_json::json!({
+                    "file": format!("{}_{:03}", config.prefix, i),
+                    "error": e,
+                }));
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": success,
+        "failed": failed,
+        "errors": errors,
+    }))
 }

@@ -5,6 +5,7 @@ import TabBar from "./components/TabBar";
 import ImageTab from "./components/ImageTab";
 import AudioTab from "./components/AudioTab";
 import VideoTab from "./components/VideoTab";
+import MusicTab from "./components/MusicTab";
 import ProgressPanel from "./components/ProgressPanel";
 import ResultSummary from "./components/ResultSummary";
 import { useGenerator } from "./hooks/useGenerator";
@@ -17,6 +18,7 @@ export default function App() {
   const [imageResult, setImageResult] = useState<TaskResult | null>(null);
   const [audioResult, setAudioResult] = useState<TaskResult | null>(null);
   const [videoResult, setVideoResult] = useState<TaskResult | null>(null);
+  const [musicResult, setMusicResult] = useState<TaskResult | null>(null);
 
   const {
     config,
@@ -29,6 +31,7 @@ export default function App() {
     generateImages,
     generateAudio,
     generateVideos,
+    generateMusic,
     cancelGeneration,
   } = useGenerator();
 
@@ -75,6 +78,14 @@ export default function App() {
     (partial: Record<string, unknown>) => {
       if (!config) return;
       updateConfig({ ...config, videoConfig: { ...config.videoConfig, ...partial } });
+    },
+    [config, updateConfig]
+  );
+
+  const handleMusicConfig = useCallback(
+    (partial: Record<string, unknown>) => {
+      if (!config) return;
+      updateConfig({ ...config, musicConfig: { ...config.musicConfig, ...partial } });
     },
     [config, updateConfig]
   );
@@ -145,6 +156,28 @@ export default function App() {
     }
   }, [config, generateVideos, downloadFFmpeg]);
 
+  const handleGenerateMusic = useCallback(async () => {
+    if (!config?.savePath) return;
+    setGenerating(true);
+    setMusicResult(null);
+    setProgress(null);
+    try {
+      const downloadResult = await downloadFFmpeg();
+      if (!downloadResult.success) {
+        throw new Error("FFmpeg 下载失败: " + downloadResult.message);
+      }
+      const res = await generateMusic(
+        config.musicConfig as unknown as Record<string, unknown>,
+        config.savePath
+      );
+      setMusicResult(res);
+    } catch (e) {
+      setMusicResult({ success: 0, failed: 1, errors: [{ file: "unknown", error: String(e) }] });
+    } finally {
+      setGenerating(false);
+    }
+  }, [config, generateMusic, downloadFFmpeg]);
+
   if (!config) {
     return <div className="app-container"><div style={{ padding: "24px" }}>加载中...</div></div>;
   }
@@ -206,6 +239,17 @@ export default function App() {
             disabled={!ffmpegReady || downloading}
           />
         )}
+        {activeTab === "music" && (
+          <MusicTab
+            config={config.musicConfig}
+            savePath={config.savePath ?? undefined}
+            onConfigChange={handleMusicConfig}
+            onGenerate={handleGenerateMusic}
+            onEstimate={(c) => estimateSize("audio", c)}
+            generating={generating}
+            disabled={!ffmpegReady || downloading}
+          />
+        )}
       </div>
       {generating && progress && (
         <ProgressPanel
@@ -219,6 +263,7 @@ export default function App() {
       {activeTab === "video" && videoResult && <ResultSummary {...videoResult} />}
       {activeTab === "image" && imageResult && <ResultSummary {...imageResult} />}
       {activeTab === "audio" && audioResult && <ResultSummary {...audioResult} />}
+      {activeTab === "music" && musicResult && <ResultSummary {...musicResult} />}
     </div>
   );
 }
