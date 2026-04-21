@@ -235,23 +235,31 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
 
         // 构建 FFmpeg sine 滤镜链
         let mut filter_parts = Vec::new();
-        let mut current_time = 0.0;
 
         for (freq, duration) in &transposed {
             let note_duration = (*duration as f64 * beat_duration * scale_factor).max(0.05);
-            
+
             // 为每个音符创建一个 sine 滤镜
             filter_parts.push(format!(
                 "sine=frequency={}:duration={}",
                 freq, note_duration
             ));
-            
-            current_time += note_duration;
         }
 
         // 使用 concat 滤镜连接所有音符
+        // 正确语法：每个 sine 作为独立输入，用分号分隔，然后 concat 连接所有输入
         let filter = if filter_parts.len() > 1 {
-            format!("{}|concat=n={}:v=0:a=1", filter_parts.join("|"), filter_parts.len())
+            let inputs: Vec<String> = filter_parts.iter()
+                .enumerate()
+                .map(|(i, f)| format!("{}[a{}]", f, i))
+                .collect();
+            let concat_inputs: Vec<String> = (0..filter_parts.len())
+                .map(|i| format!("[a{}]", i))
+                .collect();
+            format!("{};{}concat=n={}:v=0:a=1[out]",
+                inputs.join(";"),
+                concat_inputs.join(""),
+                filter_parts.len())
         } else {
             filter_parts[0].clone()
         };
