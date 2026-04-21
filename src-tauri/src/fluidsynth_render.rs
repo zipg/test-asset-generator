@@ -144,28 +144,5 @@ fn write_wav_file(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), 
 
 /// 检查 SoundFont 是否存在
 pub fn check_soundfont_exists() -> Option<std::path::PathBuf> {
-    // 检查常见的 SoundFont 位置
-    let possible_paths = [
-        "/usr/share/soundfonts/default.sf2",
-        "/usr/share/sounds/sf2/FluidR3_GM.sf2",
-        "/usr/local/share/soundfonts/default.sf2",
-        "C:\\soundfonts\\default.sf2",
-    ];
-
-    for path in &possible_paths {
-        let p = std::path::Path::new(path);
-        if p.exists() {
-            return Some(p.to_path_buf());
-        }
-    }
-
-    // 检查应用数据目录
-    if let Some(data_dir) = dirs::data_local_dir() {
-        let app_sf = data_dir.join("Muse_Generator").join("soundfont").join("default.sf2");
-        if app_sf.exists() {
-            return Some(app_sf);
-        }
-    }
-
-    None
+    crate::soundfont_manager::get_soundfont_path()
 }
