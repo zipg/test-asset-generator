@@ -20,7 +20,7 @@ hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 open = "5"
 midly = "0.5"  # MIDI 文件读写
-oxisynth = "0.1"  # FluidSynth 的纯 Rust 实现
+oxisynth = { version = "0.1", features = ["sf3"] }  # FluidSynth 的纯 Rust 实现，支持 SF3 格式
 
 [profile.release]
 panic = "abort"

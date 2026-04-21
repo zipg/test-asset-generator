@@ -10,8 +10,14 @@ pub fn get_soundfont_dir() -> Option<PathBuf> {
 /// 检查 SoundFont 是否已下载
 pub fn is_soundfont_downloaded() -> bool {
     if let Some(dir) = get_soundfont_dir() {
-        let sf_path = dir.join("default.sf2");
-        sf_path.exists() && sf_path.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false)
+        // 检查 SF3 格式（MuseScore_General.sf3）
+        let sf3_path = dir.join("default.sf3");
+        if sf3_path.exists() && sf3_path.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false) {
+            return true;
+        }
+        // 兼容 SF2 格式
+        let sf2_path = dir.join("default.sf2");
+        sf2_path.exists() && sf2_path.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false)
     } else {
         false
     }
@@ -26,7 +32,7 @@ pub fn download_soundfont() -> Result<String, String> {
 
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建目录失败: {}", e))?;
 
-    let sf_path = dir.join("default.sf2");
+    let sf_path = dir.join("default.sf3");
 
     // 如果已存在且大小正常，跳过下载
     if sf_path.exists() {
@@ -66,9 +72,17 @@ pub fn download_soundfont() -> Result<String, String> {
 
 /// 获取 SoundFont 路径（如果存在）
 pub fn get_soundfont_path() -> Option<PathBuf> {
-    if is_soundfont_downloaded() {
-        get_soundfont_dir().map(|d| d.join("default.sf2"))
-    } else {
-        None
+    if let Some(dir) = get_soundfont_dir() {
+        // 优先使用 SF3 格式
+        let sf3_path = dir.join("default.sf3");
+        if sf3_path.exists() && sf3_path.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false) {
+            return Some(sf3_path);
+        }
+        // 兼容 SF2 格式
+        let sf2_path = dir.join("default.sf2");
+        if sf2_path.exists() && sf2_path.metadata().map(|m| m.len() > 1_000_000).unwrap_or(false) {
+            return Some(sf2_path);
+        }
     }
+    None
 }
