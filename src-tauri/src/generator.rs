@@ -72,7 +72,7 @@ pub fn generate_image(config: &ImageConfig, output_dir: &std::path::Path) -> Res
         }
 
         let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+        let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
 
         let filter = build_image_filter(&config.content_type, config.width, config.height);
@@ -113,7 +113,7 @@ pub fn generate_audio(config: &AudioConfig, output_dir: &std::path::Path) -> Res
         }
 
         let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+        let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
 
         let amplitude: f32 = rand::thread_rng().gen_range(0.1..0.5);
@@ -158,7 +158,7 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
         }
 
         let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+        let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
 
         let seed: u32 = rand::thread_rng().gen();
@@ -216,7 +216,7 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
         }
 
         let random_str = random_hex(6);
-        let filename = format!("{}_{}_{:03}.{}", config.prefix, random_str, i, ext);
+        let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
 
         // 获取旋律模板
@@ -236,32 +236,28 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
         // 构建 FFmpeg sine 滤镜链，添加谐波增强音色
         let mut filter_parts = Vec::new();
 
-        for (freq, duration) in &transposed {
+        for (i, (freq, duration)) in transposed.iter().enumerate() {
             let note_duration = (*duration as f64 * beat_duration * scale_factor).max(0.05);
 
             // 为每个音符创建多个谐波（基频 + 2倍频 + 3倍频），模拟更丰富的音色
             // 使用 amix 混合谐波，音量递减
             let harmonics = format!(
-                "sine=f={}:d={}[h0];sine=f={}:d={}[h1];sine=f={}:d={}[h2];[h0][h1][h2]amix=inputs=3:weights=1.0 0.3 0.15",
-                freq, note_duration,
-                freq * 2.0, note_duration,
-                freq * 3.0, note_duration
+                "sine=f={}:d={}[h{}0];sine=f={}:d={}[h{}1];sine=f={}:d={}[h{}2];[h{}0][h{}1][h{}2]amix=inputs=3:weights=1.0 0.3 0.15[a{}]",
+                freq, note_duration, i,
+                freq * 2.0, note_duration, i,
+                freq * 3.0, note_duration, i,
+                i, i, i, i
             );
             filter_parts.push(harmonics);
         }
 
         // 使用 concat 滤镜连接所有音符
-        // 正确语法：每个 sine 作为独立输入，用分号分隔，然后 concat 连接所有输入
         let filter = if filter_parts.len() > 1 {
-            let inputs: Vec<String> = filter_parts.iter()
-                .enumerate()
-                .map(|(i, f)| format!("{}[a{}]", f, i))
-                .collect();
             let concat_inputs: Vec<String> = (0..filter_parts.len())
                 .map(|i| format!("[a{}]", i))
                 .collect();
             format!("{};{}concat=n={}:v=0:a=1[out]",
-                inputs.join(";"),
+                filter_parts.join(";"),
                 concat_inputs.join(""),
                 filter_parts.len())
         } else {

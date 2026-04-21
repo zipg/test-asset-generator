@@ -1118,41 +1118,23 @@ async fn generate_music(
     let mut failed = 0u32;
     let mut errors: Vec<serde_json::Value> = Vec::new();
 
-    let start_time = std::time::Instant::now();
-
-    for i in 1..=total {
-        if get_cancel() {
-            break;
-        }
-
-        let elapsed = start_time.elapsed().as_secs_f64();
-        let avg_time_per_file = if success + failed > 0 {
-            elapsed / (success + failed) as f64
-        } else {
-            0.0
-        };
-        let remaining = total - (success + failed);
-        let estimated_remaining = avg_time_per_file * remaining as f64;
-
-        let _ = app.emit(
-            "generation-progress",
-            serde_json::json!({
-                "current": success + failed,
-                "total": total,
-                "currentFile": format!("{}_{:03}", config.prefix, i),
-                "estimatedRemainingSecs": estimated_remaining,
-            }),
-        );
-
-        match generator::generate_music(&config, &output_dir) {
-            Ok(_) => success += 1,
-            Err(e) => {
-                failed += 1;
-                errors.push(serde_json::json!({
-                    "file": format!("{}_{:03}", config.prefix, i),
-                    "error": e,
-                }));
+    // generator::generate_music 内部已经有循环，直接调用一次即可
+    match generator::generate_music(&config, &output_dir) {
+        Ok(_) => success = total,
+        Err(e) => {
+            // 如果是取消操作，计算实际成功的数量
+            if e == "Cancelled" {
+                if let Ok(entries) = std::fs::read_dir(&output_dir) {
+                    success = entries.filter(|e| e.is_ok()).count() as u32;
+                    failed = total - success;
+                }
+            } else {
+                failed = total;
             }
+            errors.push(serde_json::json!({
+                "file": config.prefix.clone(),
+                "error": e,
+            }));
         }
     }
 
