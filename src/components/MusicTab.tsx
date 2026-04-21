@@ -12,6 +12,8 @@ interface Props {
   onGenerate: () => void;
   onEstimate: (cfg: Record<string, unknown>) => Promise<string>;
   generating: boolean;
+  soundfontReady: boolean;
+  onDownloadSoundfont: () => Promise<{ success: boolean; message: string }>;
   disabled?: boolean;
 }
 
@@ -36,6 +38,8 @@ export default function MusicTab({
   onGenerate,
   onEstimate,
   generating,
+  soundfontReady,
+  onDownloadSoundfont,
   disabled = false,
 }: Props) {
   const [estimate, setEstimate] = useState("");
@@ -135,8 +139,20 @@ export default function MusicTab({
             onChange={(e) => onConfigChange({ useFluidsynth: e.target.checked })}
             disabled={disabled || generating}
           />
-          {" "}使用 FluidSynth（真实乐器音色，需要 SoundFont）
+          {" "}使用 FluidSynth（真实乐器音色）
         </label>
+        {!soundfontReady && (
+          <button
+            className="btn-small"
+            onClick={onDownloadSoundfont}
+            disabled={disabled || generating}
+          >
+            下载音色库 (~30MB)
+          </button>
+        )}
+        {soundfontReady && (
+          <span className="status-ok">✓ 音色库已就绪</span>
+        )}
       </div>
       <div className="estimate-row">
         <span>预计体积: {estimate}</span>

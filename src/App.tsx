@@ -26,8 +26,10 @@ export default function App() {
     estimateSize,
     downloading,
     ffmpegReady,
+    soundfontReady,
     hostOs,
     downloadFFmpeg,
+    downloadSoundfont,
     generateImages,
     generateAudio,
     generateVideos,
@@ -247,6 +249,8 @@ export default function App() {
             onGenerate={handleGenerateMusic}
             onEstimate={(c) => estimateSize("audio", c)}
             generating={generating}
+            soundfontReady={soundfontReady}
+            onDownloadSoundfont={downloadSoundfont}
             disabled={!ffmpegReady || downloading}
           />
         )}

@@ -7,15 +7,18 @@ export function useGenerator() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [ffmpegReady, setFfmpegReady] = useState(true);
+  const [soundfontReady, setSoundfontReady] = useState(false);
   const [hostOs, setHostOs] = useState<string>("unknown");
 
   useEffect(() => {
     Promise.all([
       invoke<string>("host_os").catch(() => "unknown"),
       invoke<string>("check_ffmpeg").catch(() => "not_found"),
-    ]).then(([os, status]) => {
+      invoke<string>("check_soundfont").catch(() => "not_found"),
+    ]).then(([os, ffmpegStatus, soundfontStatus]) => {
       setHostOs(os);
-      setFfmpegReady(status === "found");
+      setFfmpegReady(ffmpegStatus === "found");
+      setSoundfontReady(soundfontStatus === "found");
     });
 
     invoke<AppConfig>("get_config")
@@ -49,6 +52,19 @@ export function useGenerator() {
     setDownloading(true);
     try {
       const result = await invoke<string>("download_ffmpeg");
+      return { success: true, message: result };
+    } catch (e) {
+      return { success: false, message: String(e) };
+    } finally {
+      setDownloading(false);
+    }
+  }, []);
+
+  const downloadSoundfont = useCallback(async (): Promise<{ success: boolean; message: string }> => {
+    setDownloading(true);
+    try {
+      const result = await invoke<string>("download_soundfont");
+      setSoundfontReady(true);
       return { success: true, message: result };
     } catch (e) {
       return { success: false, message: String(e) };
@@ -143,10 +159,12 @@ export function useGenerator() {
     loading,
     downloading,
     ffmpegReady,
+    soundfontReady,
     hostOs,
     estimateSize,
     selectPath,
     downloadFFmpeg,
+    downloadSoundfont,
     generateImages,
     generateAudio,
     generateVideos,
