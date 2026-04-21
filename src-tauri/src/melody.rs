@@ -38,52 +38,58 @@ pub fn get_arpeggio_pattern() -> Vec<Note> {
     ]
 }
 
-/// 民谣风格旋律：简单的 8 小节旋律
+/// 民谣风格旋律：简单的 8 小节旋律，重复 2 次
 pub fn get_folk_melody() -> Vec<Note> {
-    vec![
-        (261.63, 1.0), // C
-        (261.63, 1.0), // C
-        (293.66, 1.0), // D
-        (329.63, 1.0), // E
-        (329.63, 1.0), // E
-        (293.66, 1.0), // D
-        (261.63, 2.0), // C (长音)
-        (329.63, 1.0), // E
-        (329.63, 1.0), // E
-        (349.23, 1.0), // F
-        (392.00, 2.0), // G (长音)
-        (392.00, 1.0), // G
-        (349.23, 1.0), // F
-        (329.63, 1.0), // E
-        (293.66, 1.0), // D
-        (261.63, 2.0), // C (长音)
-    ]
+    let pattern = vec![
+        (261.63, 0.5), // C
+        (261.63, 0.5), // C
+        (293.66, 0.5), // D
+        (329.63, 0.5), // E
+        (329.63, 0.5), // E
+        (293.66, 0.5), // D
+        (261.63, 1.0), // C (长音)
+        (329.63, 0.5), // E
+        (329.63, 0.5), // E
+        (349.23, 0.5), // F
+        (392.00, 1.0), // G (长音)
+        (392.00, 0.5), // G
+        (349.23, 0.5), // F
+        (329.63, 0.5), // E
+        (293.66, 0.5), // D
+        (261.63, 1.0), // C (长音)
+    ];
+    // 重复 2 次增加长度
+    let mut notes = pattern.clone();
+    notes.extend(pattern);
+    notes
 }
 
 /// 根据模板名称获取旋律
 pub fn get_melody_by_template(template: &str) -> Vec<Note> {
     match template {
         "scale" => {
-            // 上行音阶 + 下行音阶
+            // 上行音阶 + 下行音阶，重复 4 次增加音符密度
             let mut notes = Vec::new();
-            for &freq in C_MAJOR_SCALE {
-                notes.push((freq, 1.0));
-            }
-            for &freq in C_MAJOR_SCALE.iter().rev().skip(1) {
-                notes.push((freq, 1.0));
+            for _ in 0..4 {
+                for &freq in C_MAJOR_SCALE {
+                    notes.push((freq, 0.5)); // 缩短每个音符时长
+                }
+                for &freq in C_MAJOR_SCALE.iter().rev().skip(1) {
+                    notes.push((freq, 0.5));
+                }
             }
             notes
         }
         "arpeggio" => get_arpeggio_pattern(),
         "folk" => get_folk_melody(),
         "random" => {
-            // 随机从五声音阶选择 16 个音符
+            // 随机从五声音阶选择 32 个音符（增加密度）
             use rand::Rng;
             let mut rng = rand::thread_rng();
             let mut notes = Vec::new();
-            for _ in 0..16 {
+            for _ in 0..32 {
                 let freq = PENTATONIC_SCALE[rng.gen_range(0..PENTATONIC_SCALE.len())];
-                let duration = if rng.gen_bool(0.2) { 2.0 } else { 1.0 };
+                let duration = if rng.gen_bool(0.2) { 1.0 } else { 0.5 };
                 notes.push((freq, duration));
             }
             notes

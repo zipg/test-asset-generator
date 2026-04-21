@@ -233,17 +233,21 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
         let total_beats: f32 = transposed.iter().map(|(_, dur)| dur).sum();
         let scale_factor = config.duration / (total_beats as f64 * beat_duration);
 
-        // 构建 FFmpeg sine 滤镜链
+        // 构建 FFmpeg sine 滤镜链，添加谐波增强音色
         let mut filter_parts = Vec::new();
 
         for (freq, duration) in &transposed {
             let note_duration = (*duration as f64 * beat_duration * scale_factor).max(0.05);
 
-            // 为每个音符创建一个 sine 滤镜
-            filter_parts.push(format!(
-                "sine=frequency={}:duration={}",
-                freq, note_duration
-            ));
+            // 为每个音符创建多个谐波（基频 + 2倍频 + 3倍频），模拟更丰富的音色
+            // 使用 amix 混合谐波，音量递减
+            let harmonics = format!(
+                "sine=f={}:d={}[h0];sine=f={}:d={}[h1];sine=f={}:d={}[h2];[h0][h1][h2]amix=inputs=3:weights=1.0 0.3 0.15",
+                freq, note_duration,
+                freq * 2.0, note_duration,
+                freq * 3.0, note_duration
+            );
+            filter_parts.push(harmonics);
         }
 
         // 使用 concat 滤镜连接所有音符
