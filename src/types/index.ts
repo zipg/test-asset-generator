@@ -60,7 +60,17 @@ export interface VideoConfig {
   audioContent: AudioContentType;
 }
 
-export type MelodyTemplate = "scale" | "arpeggio" | "folk" | "random";
+export type MelodyTemplate =
+  | "scale"
+  | "arpeggio"
+  | "folk"
+  | "random"
+  | "twinkle"
+  | "ode_to_joy"
+  | "canon"
+  | "castle_sky"
+  | "jasmine"
+  | "birthday";
 
 export interface MusicConfig {
   format: AudioFormat;

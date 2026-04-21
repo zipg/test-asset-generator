@@ -20,6 +20,12 @@ const MELODY_OPTIONS: { value: MelodyTemplate; label: string }[] = [
   { value: "scale", label: "音阶练习" },
   { value: "arpeggio", label: "琶音" },
   { value: "folk", label: "民谣旋律" },
+  { value: "twinkle", label: "小星星" },
+  { value: "ode_to_joy", label: "欢乐颂" },
+  { value: "canon", label: "卡农" },
+  { value: "castle_sky", label: "天空之城" },
+  { value: "jasmine", label: "茉莉花" },
+  { value: "birthday", label: "生日快乐" },
   { value: "random", label: "随机旋律" },
 ];
 

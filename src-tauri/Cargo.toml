@@ -19,6 +19,7 @@ md5 = "0.7"
 hex = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 open = "5"
+midly = "0.5"  # MIDI 文件读写
 
 [profile.release]
 panic = "abort"

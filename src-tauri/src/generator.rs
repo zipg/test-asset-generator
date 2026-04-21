@@ -233,35 +233,41 @@ pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Res
         let total_beats: f32 = transposed.iter().map(|(_, dur)| dur).sum();
         let scale_factor = config.duration / (total_beats as f64 * beat_duration);
 
-        // 构建 FFmpeg sine 滤镜链，添加谐波增强音色
+        // 构建 FFmpeg 滤镜链，添加谐波、包络和混响增强音色
         let mut filter_parts = Vec::new();
 
         for (i, (freq, duration)) in transposed.iter().enumerate() {
             let note_duration = (*duration as f64 * beat_duration * scale_factor).max(0.05);
 
             // 为每个音符创建多个谐波（基频 + 2倍频 + 3倍频），模拟更丰富的音色
-            // 使用 amix 混合谐波，音量递减
+            // 添加淡入淡出包络，让音符更自然
+            let fade_duration = (note_duration * 0.1).min(0.05); // 淡入淡出时长
+            let fade_out_start = note_duration - fade_duration;
             let harmonics = format!(
-                "sine=f={}:d={}[h{}0];sine=f={}:d={}[h{}1];sine=f={}:d={}[h{}2];[h{}0][h{}1][h{}2]amix=inputs=3:weights=1.0 0.3 0.15[a{}]",
+                "sine=f={}:d={}[h{}0];sine=f={}:d={}[h{}1];sine=f={}:d={}[h{}2];\
+                [h{}0][h{}1][h{}2]amix=inputs=3:weights=1.0 0.3 0.15[m{}];\
+                [m{}]afade=t=in:st=0:d={}:curve=esin,afade=t=out:st={}:d={}:curve=esin[a{}]",
                 freq, note_duration, i,
                 freq * 2.0, note_duration, i,
                 freq * 3.0, note_duration, i,
-                i, i, i, i
+                i, i, i, i,
+                i, fade_duration,
+                fade_out_start, fade_duration, i
             );
             filter_parts.push(harmonics);
         }
 
-        // 使用 concat 滤镜连接所有音符
+        // 使用 concat 滤镜连接所有音符，然后添加混响效果
         let filter = if filter_parts.len() > 1 {
             let concat_inputs: Vec<String> = (0..filter_parts.len())
                 .map(|i| format!("[a{}]", i))
                 .collect();
-            format!("{};{}concat=n={}:v=0:a=1[out]",
+            format!("{};{}concat=n={}:v=0:a=1[concat];[concat]aecho=0.8:0.88:60:0.4[out]",
                 filter_parts.join(";"),
                 concat_inputs.join(""),
                 filter_parts.len())
         } else {
-            filter_parts[0].clone()
+            format!("{}[single];[single]aecho=0.8:0.88:60:0.4[out]", filter_parts[0])
         };
 
         let mut args: Vec<String> = vec![
