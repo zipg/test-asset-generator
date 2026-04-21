@@ -1,7 +1,6 @@
 **界面预览**
-<img width="2514" height="1246" alt="img_v3_0210q_97c84749-3b52-45fe-b4bc-94158e2757cg" src="https://github.com/user-attachments/assets/80774a22-e4da-4fb5-ae0b-fe94c0e49d75" />
+<img width="2560" height="1594" alt="image" src="https://github.com/user-attachments/assets/c83cd418-dcee-4d2d-8cc8-ce56be691396" />
 
-<img width="2470" height="1052" alt="img_v3_0210q_149d2437-1989-4884-88a0-f10a6c0271cg" src="https://github.com/user-attachments/assets/841f0a18-5eb6-41be-adf4-ff1e83f3b23f" />
 
 **技术架构**
   跨平台桌面框架: Tauri 2.0
@@ -32,7 +31,7 @@
 - dirs — 跨平台获取 AppData/LocalAppData 路径     
 **功能特性**                                                                                                                                           
   - 图片生成：支持 PNG/JPG/WEBP，可配置分辨率、内容类型（纯色/渐变/测试图案/噪声）、生成数量及文件名前缀
-  - 音频生成：支持 MP3/WAV/AAC，可配置时长、采样率（44100/48000）、声道（单声道/立体声）
+  - 音频生成：支持 MP3/WAV/AAC，可配置时长、采样率（44100/48000）、声道（单声道/立体声），可生成随机音乐/音符/噪音
   - 视频生成：支持 MP4/MOV/WEBM，可配置编码器（h264/hevc）、分辨率、帧率、时长、内容类型
   - FFmpeg 自动检测与下载：Windows端已内置FFmpeg；macOS 优先使用 Homebrew 安装的ffmpeg
   - 生成进度跟踪：实时显示当前文件、预计剩余时间，支持中途取消
