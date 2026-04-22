@@ -204,6 +204,7 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
 
 /// 生成单个音乐文件
 pub fn generate_single_music(
+    app: &tauri::AppHandle,
     config: &MusicConfig,
     output_dir: &std::path::Path,
     file_index: u32,
@@ -248,7 +249,7 @@ pub fn generate_single_music(
 
     // 如果启用 FluidSynth 且 SoundFont 可用，使用 FluidSynth 渲染
     if config.use_fluidsynth {
-        if let Some(soundfont_path) = crate::fluidsynth_render::check_soundfont_exists() {
+        if let Some(soundfont_path) = crate::fluidsynth_render::check_soundfont_exists(app) {
             let temp_wav = output_dir.join(format!("temp_{}.wav", random_str));
 
             match crate::fluidsynth_render::render_with_fluidsynth(
@@ -342,9 +343,9 @@ pub fn generate_single_music(
 }
 
 /// 生成多个音乐文件（保留用于批量生成）
-pub fn generate_music(config: &MusicConfig, output_dir: &std::path::Path) -> Result<(), String> {
+pub fn generate_music(app: &tauri::AppHandle, config: &MusicConfig, output_dir: &std::path::Path) -> Result<(), String> {
     for i in 1..=config.count {
-        generate_single_music(config, output_dir, i)?;
+        generate_single_music(app, config, output_dir, i)?;
     }
     Ok(())
 }

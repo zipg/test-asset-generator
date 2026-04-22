@@ -143,6 +143,6 @@ fn write_wav_file(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), 
 }
 
 /// 检查 SoundFont 是否存在
-pub fn check_soundfont_exists() -> Option<std::path::PathBuf> {
-    crate::soundfont_manager::get_soundfont_path()
+pub fn check_soundfont_exists(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
+    crate::soundfont_manager::get_soundfont_path(app)
 }

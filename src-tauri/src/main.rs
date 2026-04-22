@@ -1149,7 +1149,7 @@ async fn generate_music(
             }),
         );
 
-        match generator::generate_single_music(&config, &output_dir, i) {
+        match generator::generate_single_music(&app, &config, &output_dir, i) {
             Ok(_) => success += 1,
             Err(e) => {
                 failed += 1;
@@ -1169,8 +1169,8 @@ async fn generate_music(
 }
 
 #[tauri::command]
-fn check_soundfont() -> String {
-    if soundfont_manager::is_soundfont_downloaded() {
+fn check_soundfont(app: tauri::AppHandle) -> String {
+    if soundfont_manager::is_soundfont_downloaded(&app) {
         "found".to_string()
     } else {
         "not_found".to_string()
@@ -1178,6 +1178,6 @@ fn check_soundfont() -> String {
 }
 
 #[tauri::command]
-fn download_soundfont() -> Result<String, String> {
-    soundfont_manager::download_soundfont()
+fn download_soundfont(app: tauri::AppHandle) -> Result<String, String> {
+    soundfont_manager::download_soundfont(&app)
 }
