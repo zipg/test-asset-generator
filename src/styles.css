@@ -486,3 +486,48 @@ body {
 .music-overlay-btn:hover {
   background: #0077ed;
 }
+
+/* Boudoir 18+ Warning Overlay */
+.boudoir-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 0 0 12px 12px;
+}
+
+.boudoir-overlay-card {
+  background: #ffffff;
+  border-radius: 10px;
+  padding: 24px 28px 20px;
+  text-align: center;
+  max-width: 340px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  border: 2px solid #ff3b30;
+}
+
+.boudoir-overlay-text {
+  font-size: 14px;
+  color: #3d3d3f;
+  line-height: 1.7;
+  margin-bottom: 18px;
+}
+
+.boudoir-overlay-btn {
+  background: #ff3b30;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 32px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.boudoir-overlay-btn:hover {
+  background: #e0352b;
+}

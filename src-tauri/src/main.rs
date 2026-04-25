@@ -197,6 +197,32 @@ fn windows_ffmpeg_zip_url_candidates() -> Vec<String> {
     ]
 }
 
+async fn fetch_network_image_bytes(width: u32, height: u32, crop: bool) -> Result<Vec<u8>, String> {
+    let (fetch_w, fetch_h) = if crop {
+        ((width as f64 * 1.3).ceil() as u32, (height as f64 * 1.3).ceil() as u32)
+    } else {
+        (width, height)
+    };
+
+    let urls = [
+        format!("https://picsum.photos/{}/{}", fetch_w, fetch_h),
+        format!("https://loremflickr.com/{}/{}", fetch_w, fetch_h),
+        format!("https://random.imagecdn.app/{}/{}", fetch_w, fetch_h),
+    ];
+
+    let mut last_err = String::new();
+    for url in &urls {
+        match fetch_url_bytes(url).await {
+            Ok(data) => return Ok(data),
+            Err(e) => {
+                last_err = e;
+                eprintln!("Network image source {} failed: {}", url, last_err);
+            }
+        }
+    }
+    Err(format!("所有网络图源均已耗尽: {}", last_err))
+}
+
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
@@ -405,6 +431,12 @@ async fn select_save_path(app: tauri::AppHandle) -> Result<Option<String>, Strin
 fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
     match media_type.as_str() {
         "image" => {
+            let image_source = cfg["imageSource"].as_str().unwrap_or("generated");
+            if image_source == "network" || image_source == "boudoir" {
+                let count = cfg["count"].as_u64().unwrap_or(1);
+                let size = count as f64 * 0.2; // ~200 KB per JPEG from network
+                return format!("~{:.1} MB (远程)", size.max(0.01));
+            }
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
             let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
@@ -494,25 +526,70 @@ async fn generate_images(
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
 
-            let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
+            let gen_result = match config.image_source.as_str() {
+                "network" | "boudoir" => {
+                    let raw_bytes: Vec<u8> = if config.image_source == "boudoir" {
+                        fetch_url_bytes("https://boudoir.ortlinde.com/random").await?
+                    } else {
+                        fetch_network_image_bytes(config.width, config.height, config.crop).await?
+                    };
 
-            let mut args: Vec<String> = vec![
-                "-f".to_string(), "lavfi".to_string(),
-                "-i".to_string(), filter,
-                "-vframes".to_string(), "1".to_string(),
-                "-y".to_string(),
-            ];
+                    let tmp_path = output_dir.join(format!("_tmp_{:06}_{}.jpg", i, seed));
+                    std::fs::write(&tmp_path, &raw_bytes)
+                        .map_err(|e| format!("写入临时文件失败: {}", e))?;
 
-            match ext {
-                "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
-                "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
-                "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
-                _ => {}
-            }
+                    let vf = if config.crop {
+                        format!(
+                            "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}",
+                            config.width, config.height, config.width, config.height
+                        )
+                    } else {
+                        format!(
+                            "scale={}:{}:force_original_aspect_ratio=decrease",
+                            config.width, config.height
+                        )
+                    };
 
-            args.push(output_path.to_str().unwrap().to_string());
+                    let mut args: Vec<String> = vec![
+                        "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
+                        "-vf".to_string(), vf,
+                        "-vframes".to_string(), "1".to_string(),
+                        "-y".to_string(),
+                    ];
+                    match ext {
+                        "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+                        "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                        "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
+                        _ => {}
+                    }
+                    args.push(output_path.to_str().unwrap().to_string());
 
-            match ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30) {
+                    let result = ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 60);
+                    let _ = std::fs::remove_file(&tmp_path);
+                    result
+                }
+                _ => {
+                    let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
+
+                    let mut args: Vec<String> = vec![
+                        "-f".to_string(), "lavfi".to_string(),
+                        "-i".to_string(), filter,
+                        "-vframes".to_string(), "1".to_string(),
+                        "-y".to_string(),
+                    ];
+                    match ext {
+                        "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+                        "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                        "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
+                        _ => {}
+                    }
+                    args.push(output_path.to_str().unwrap().to_string());
+
+                    ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30)
+                }
+            };
+
+            match gen_result {
                 Ok(_) => {
                     // Check MD5 for uniqueness
                     match file_md5(&output_path) {

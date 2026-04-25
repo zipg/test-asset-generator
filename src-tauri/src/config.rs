@@ -12,6 +12,11 @@ pub struct ImageConfig {
     pub content_type: String,
     pub count: u32,
     pub prefix: String,
+    /// "generated" | "network" | "boudoir"
+    #[serde(default = "default_image_source")]
+    pub image_source: String,
+    #[serde(default = "default_crop")]
+    pub crop: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +128,14 @@ fn default_video_dynamics() -> u32 {
     5
 }
 
+fn default_image_source() -> String {
+    "generated".to_string()
+}
+
+fn default_crop() -> bool {
+    true
+}
+
 fn default_music_config() -> MusicConfig {
     MusicConfig {
         format: "MP3".to_string(),
@@ -143,7 +156,7 @@ fn default_music_config() -> MusicConfig {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            schema_version: 2,
+            schema_version: 3,
             save_path: None,
             image_config: ImageConfig {
                 format: "PNG".to_string(),
@@ -152,6 +165,8 @@ impl Default for AppConfig {
                 content_type: "gradient".to_string(),
                 count: 10,
                 prefix: "测试图片".to_string(),
+                image_source: "generated".to_string(),
+                crop: true,
             },
             audio_config: AudioConfig {
                 format: "MP3".to_string(),

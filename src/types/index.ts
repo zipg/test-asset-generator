@@ -17,6 +17,8 @@ export type VideoFormat =
   | "3GP";
 /** 图片内容类型 */
 export type ImageContentType = "solid" | "gradient" | "pattern" | "noise";
+/** 图片来源 */
+export type ImageSource = "generated" | "network" | "boudoir";
 /** 视频内容类型 */
 export type VideoContentType =
   | "gradient"
@@ -46,6 +48,8 @@ export interface ImageConfig {
   contentType: ImageContentType;
   count: number;
   prefix: string;
+  imageSource: ImageSource;
+  crop: boolean;
 }
 
 export interface AudioConfig {
