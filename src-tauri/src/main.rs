@@ -247,6 +247,7 @@ async fn fetch_boudoir_image() -> Result<Vec<u8>, String> {
         .build()
         .map_err(|e| format!("HTTP client: {}", e))?;
 
+    // 主 API: 直接返回图片
     let response = client
         .get("https://boudoir.ortlinde.com/random")
         .send()
@@ -254,15 +255,58 @@ async fn fetch_boudoir_image() -> Result<Vec<u8>, String> {
         .map_err(|e| format!("网络请求失败: {}", e))?;
 
     match response.status().as_u16() {
-        200 => response
-            .bytes()
-            .await
-            .map(|b| b.to_vec())
-            .map_err(|e| format!("读取响应失败: {}", e)),
-        403 => Err("IP已被临时封禁 (403), 该API限制 300秒内100次请求后封禁30分钟, 请等待30分钟后重试".to_string()),
-        429 => Err("请求过于频繁 (429), 请稍后重试 (API限制 300s/100次/封30分钟)".to_string()),
-        other => Err(format!("服务器返回错误 HTTP {}", other)),
+        200 => {
+            return response
+                .bytes()
+                .await
+                .map(|b| b.to_vec())
+                .map_err(|e| format!("读取响应失败: {}", e));
+        }
+        403 => {
+            eprintln!("Boudoir primary returned 403, trying fallback");
+        }
+        429 => {
+            eprintln!("Boudoir primary returned 429, trying fallback");
+        }
+        other => {
+            eprintln!("Boudoir primary returned HTTP {}, trying fallback", other);
+        }
     }
+
+    // 备用 API: 返回 JSON { "url": "..." }
+    let fallback_resp = client
+        .get("https://img.api.sld.tw/pic?json=h")
+        .send()
+        .await
+        .map_err(|e| format!("备用API请求失败: {}", e))?;
+
+    if !fallback_resp.status().is_success() {
+        return Err(format!("备用API返回 HTTP {}, 主API也不可用", fallback_resp.status()));
+    }
+
+    let body = fallback_resp
+        .bytes()
+        .await
+        .map_err(|e| format!("读取备用API响应失败: {}", e))?;
+
+    let json: serde_json::Value = serde_json::from_slice(&body)
+        .map_err(|e| format!("解析备用API响应失败: {}", e))?;
+
+    let img_url = json["url"]
+        .as_str()
+        .ok_or_else(|| "备用API未返回图片URL".to_string())?;
+
+    let img_bytes = client
+        .get(img_url)
+        .send()
+        .await
+        .map_err(|e| format!("获取备用图片失败: {}", e))?
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("读取备用图片失败: {}", e))?;
+
+    Ok(img_bytes)
 }
 
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
