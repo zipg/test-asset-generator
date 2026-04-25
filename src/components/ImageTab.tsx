@@ -23,6 +23,7 @@ const FORMAT_OPTIONS: ImageFormat[] = [
 const SOURCE_OPTIONS: { value: ImageSource; label: string }[] = [
   { value: "generated", label: "程序生成" },
   { value: "network", label: "网络获取" },
+  { value: "anime", label: "二次元" },
   { value: "boudoir", label: "其它" },
 ];
 const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
@@ -87,6 +88,8 @@ export default function ImageTab({
     const updates: Partial<ImageConfig> = { imageSource: source };
     if (source === "network") {
       updates.prefix = "网络图片";
+    } else if (source === "anime") {
+      updates.prefix = "二次元";
     } else if (source === "boudoir") {
       updates.prefix = "NSFW";
       try {

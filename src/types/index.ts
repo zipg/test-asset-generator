@@ -18,7 +18,7 @@ export type VideoFormat =
 /** 图片内容类型 */
 export type ImageContentType = "solid" | "gradient" | "pattern" | "noise";
 /** 图片来源 */
-export type ImageSource = "generated" | "network" | "boudoir";
+export type ImageSource = "generated" | "network" | "anime" | "boudoir";
 /** 视频内容类型 */
 export type VideoContentType =
   | "gradient"

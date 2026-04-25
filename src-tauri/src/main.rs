@@ -309,6 +309,48 @@ async fn fetch_boudoir_image() -> Result<Vec<u8>, String> {
     Ok(img_bytes)
 }
 
+async fn fetch_anime_image() -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .connect_timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|e| format!("HTTP client: {}", e))?;
+
+    // 主: 直接返回 webp 图片
+    let resp = client
+        .get("https://api.neix.in/random/mobile")
+        .send()
+        .await
+        .map_err(|e| format!("二次元API请求失败: {}", e))?;
+
+    if resp.status().is_success() {
+        return resp
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| format!("读取二次元图片失败: {}", e));
+    }
+
+    eprintln!("Anime primary returned HTTP {}, trying fallback", resp.status());
+
+    // 备用: 302 跳转到图片地址, reqwest 自动跟随
+    let fallback = client
+        .get("https://app.zichen.zone/api/acg/api.php")
+        .send()
+        .await
+        .map_err(|e| format!("备用二次元API请求失败: {}", e))?;
+
+    if !fallback.status().is_success() {
+        return Err(format!("二次元API均不可用 (HTTP {})", fallback.status()));
+    }
+
+    fallback
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("读取备用二次元图片失败: {}", e))
+}
+
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
@@ -518,7 +560,7 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
     match media_type.as_str() {
         "image" => {
             let image_source = cfg["imageSource"].as_str().unwrap_or("generated");
-            if image_source == "network" || image_source == "boudoir" {
+            if image_source == "network" || image_source == "anime" || image_source == "boudoir" {
                 let count = cfg["count"].as_u64().unwrap_or(1);
                 let size = count as f64 * 0.2; // ~200 KB per JPEG from network
                 return format!("~{:.1} MB (远程)", size.max(0.01));
@@ -613,9 +655,11 @@ async fn generate_images(
             let seed: u32 = unique_seed();
 
             let gen_result = match config.image_source.as_str() {
-                "network" | "boudoir" => {
+                "network" | "anime" | "boudoir" => {
                     let raw_bytes: Vec<u8> = if config.image_source == "boudoir" {
                         fetch_boudoir_image().await?
+                    } else if config.image_source == "anime" {
+                        fetch_anime_image().await?
                     } else {
                         fetch_network_image_bytes(config.width, config.height, config.crop).await?
                     };
