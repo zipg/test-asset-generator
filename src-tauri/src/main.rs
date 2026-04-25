@@ -991,6 +991,8 @@ async fn generate_videos(
             let w = config.width;
             let h = config.height;
             let f = config.fps;
+            let hw = w / 2;
+            let hh = h / 2;
             let filter = match config.content_type.as_str() {
                 "solid" => {
                     let color_hue = (seed % 360) as f32;
@@ -1010,27 +1012,27 @@ async fn generate_videos(
                     (seed % 180 + 60) as f32 * speed
                 ),
                 "noise" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N)*255':g='random(Y+N*2)*255':b='random(X*Y+N*3)*255'",
-                    w, h, f, duration_str
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N)*255':g='random(Y+N*2)*255':b='random(X*Y+N*3)*255',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h
                 ),
                 "plasma" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s})*cos(Y/H*6.283+T*{s}*0.7)':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3)*cos((X-Y)/(W+H)*9.425+T*{s}*0.9)':b='128+127*cos(X/W*7.854+T*{s}*0.8)*sin(Y/H*7.854+T*{s}*1.1)'",
-                    w, h, f, duration_str,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s})*cos(Y/H*6.283+T*{s}*0.7)':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3)*cos((X-Y)/(W+H)*9.425+T*{s}*0.9)':b='128+127*cos(X/W*7.854+T*{s}*0.8)*sin(Y/H*7.854+T*{s}*1.1)',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
                 ),
                 "waves" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s})*cos(X/20)':g='128+100*cos(X/15+T*{s}*1.2)*sin(Y/18)':b='128+100*sin((X+Y)/18+T*{s}*1.4)'",
-                    w, h, f, duration_str,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s})*cos(X/20)':g='128+100*cos(X/15+T*{s}*1.2)*sin(Y/18)':b='128+100*sin((X+Y)/18+T*{s}*1.4)',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
                 ),
                 "kaleidoscope" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s})*sin(hypot(X-W/2,Y-H/2)/18)':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8)*sin(hypot(X-W/2,Y-H/2)/18)':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1)*sin(hypot(X-W/2,Y-H/2)/18)'",
-                    w, h, f, duration_str,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s})*sin(hypot(X-W/2,Y-H/2)/18)':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8)*sin(hypot(X-W/2,Y-H/2)/18)':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1)*sin(hypot(X-W/2,Y-H/2)/18)',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
                 ),
                 "audioviz" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5))+0.03),40,0)'",
-                    w, h, f, duration_str,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5))+0.03),40,0)',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
                 ),
                 _ => {
