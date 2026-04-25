@@ -3,7 +3,7 @@ import type {
   VideoConfig,
   VideoFormat,
   Codec,
-  ContentType,
+  VideoContentType,
   AudioContentType,
 } from "../types";
 
@@ -39,11 +39,16 @@ const CODEC_OPTIONS: { value: Codec; label: string }[] = [
   { value: "hevc", label: "H.265" },
 ];
 const FPS_OPTIONS = [30, 60];
-const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
-  { value: "noise", label: "随机噪声" },
-  { value: "solid", label: "纯色" },
-  { value: "gradient", label: "渐变" },
-  { value: "pattern", label: "图案(彩条)" },
+const CONTENT_OPTIONS: { value: VideoContentType; label: string }[] = [
+  { value: "gradient", label: "随机渐变" },
+  { value: "pattern", label: "彩条图案" },
+  { value: "noise", label: "元胞噪声" },
+  { value: "plasma", label: "等离子动态" },
+  { value: "waves", label: "波纹律动" },
+  { value: "kaleidoscope", label: "万花筒" },
+  { value: "fractal", label: "分形动画" },
+  { value: "life", label: "生命游戏" },
+  { value: "audioviz", label: "音频可视化" },
 ];
 
 const ASPECT_RATIO = 16 / 9; // height / width for 9:16
@@ -198,13 +203,25 @@ export default function VideoTab({
         <label>内容类型</label>
         <select
           value={config.contentType}
-          onChange={(e) => onConfigChange({ contentType: e.target.value as ContentType })}
+          onChange={(e) => onConfigChange({ contentType: e.target.value as VideoContentType })}
           disabled={disabled || generating}
         >
           {CONTENT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
+      </div>
+      <div className="form-row">
+        <label>画面动态: {config.dynamics ?? 5}</label>
+        <input
+          type="range"
+          value={config.dynamics ?? 5}
+          min={1}
+          max={10}
+          step={1}
+          onChange={(e) => onConfigChange({ dynamics: parseInt(e.target.value) })}
+          disabled={disabled || generating}
+        />
       </div>
       <div className="form-row">
         <label>增加音频</label>

@@ -15,7 +15,19 @@ export type VideoFormat =
   | "FLV"
   | "MKV"
   | "3GP";
-export type ContentType = "solid" | "gradient" | "pattern" | "noise";
+/** 图片内容类型 */
+export type ImageContentType = "solid" | "gradient" | "pattern" | "noise";
+/** 视频内容类型 */
+export type VideoContentType =
+  | "gradient"
+  | "pattern"
+  | "noise"
+  | "plasma"
+  | "waves"
+  | "kaleidoscope"
+  | "fractal"
+  | "life"
+  | "audioviz";
 /** 音频内容：随机噪音 / 简单节奏 / 随机音符 / 随机音乐（古典动机循环） */
 export type AudioContentType =
   | "noise"
@@ -31,7 +43,7 @@ export interface ImageConfig {
   format: ImageFormat;
   width: number;
   height: number;
-  contentType: ContentType;
+  contentType: ImageContentType;
   count: number;
   prefix: string;
 }
@@ -53,11 +65,13 @@ export interface VideoConfig {
   height: number;
   fps: number;
   duration: number;
-  contentType: ContentType;
+  contentType: VideoContentType;
   count: number;
   prefix: string;
   addAudioTrack: boolean;
   audioContent: AudioContentType;
+  /** 画面动态强度 1-10 */
+  dynamics: number;
 }
 
 export type MelodyTemplate =
@@ -72,6 +86,8 @@ export type MelodyTemplate =
   | "jasmine"
   | "birthday";
 
+export type SoundEngine = "fluidsynth" | "simple";
+
 export interface MusicConfig {
   format: AudioFormat;
   duration: number;
@@ -79,7 +95,12 @@ export interface MusicConfig {
   melody: MelodyTemplate;
   count: number;
   prefix: string;
-  useFluidsynth: boolean;
+  /** @deprecated 替换为 soundEngine */
+  useFluidsynth?: boolean;
+  soundEngine: SoundEngine;
+  instrument: string;
+  enableDrums: boolean;
+  enableHarmony: boolean;
   gainDb: number;
 }
 

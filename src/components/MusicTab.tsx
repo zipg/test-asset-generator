@@ -94,8 +94,8 @@ export default function MusicTab({
           disabled={disabled || generating}
         />
       </div>
-      <div className="form-row">
-        <label>音量增益: {config.gainDb ?? 0} dB</label>
+      <div className="form-row gain-row">
+        <label>音量增益</label>
         <input
           type="range"
           value={config.gainDb ?? 0}
@@ -105,6 +105,7 @@ export default function MusicTab({
           onChange={(e) => onConfigChange({ gainDb: parseFloat(e.target.value) })}
           disabled={disabled || generating}
         />
+        <span className="gain-tag">{config.gainDb ?? 0} dB</span>
       </div>
       <div className="form-row">
         <label>旋律模板</label>
@@ -139,21 +140,80 @@ export default function MusicTab({
         />
       </div>
       <div className="form-row">
-        <label>
-          <input
-            type="checkbox"
-            checked={config.useFluidsynth}
-            onChange={(e) => onConfigChange({ useFluidsynth: e.target.checked })}
-            disabled={disabled || generating}
-          />
-          {" "}使用 FluidSynth（真实乐器音色）
-        </label>
-        {soundfontReady ? (
-          <span className="status-ok">✓ 音色库已就绪</span>
-        ) : (
-          <span className="status-warn">⚠ 音色库未内置</span>
-        )}
+        <label>音色引擎</label>
+        <select
+          value={config.soundEngine ?? "fluidsynth"}
+          onChange={(e) => onConfigChange({ soundEngine: e.target.value as "fluidsynth" | "simple" })}
+          disabled={disabled || generating}
+        >
+          <option value="fluidsynth">真实乐器 (FluidSynth, 较慢)</option>
+          <option value="simple">简易合成 (速度快)</option>
+        </select>
+        {(config.soundEngine ?? "fluidsynth") === "fluidsynth"
+          ? (soundfontReady
+            ? <span className="status-ok">✓ 音色库已就绪</span>
+            : <span className="status-warn">⚠ 音色库未内置</span>)
+          : <span className="status-ok">✓ 无需音色库</span>
+        }
       </div>
+      {(config.soundEngine ?? "fluidsynth") === "fluidsynth" && (
+        <>
+          <div className="form-row">
+            <label>乐器选择</label>
+            <select
+              value={config.instrument ?? "random"}
+              onChange={(e) => onConfigChange({ instrument: e.target.value })}
+              disabled={disabled || generating}
+            >
+              <option value="random">随机乐器</option>
+              <option value="0">Acoustic Grand Piano (大钢琴)</option>
+              <option value="1">Bright Acoustic Piano (亮音钢琴)</option>
+              <option value="6">Harpsichord (羽管键琴)</option>
+              <option value="8">Celesta (钢片琴)</option>
+              <option value="11">Vibraphone (颤音琴)</option>
+              <option value="13">Marimba (马林巴)</option>
+              <option value="15">Dulcimer (扬琴)</option>
+              <option value="20">Reed Organ (簧风琴)</option>
+              <option value="22">Accordion (手风琴)</option>
+              <option value="25">Acoustic Guitar nylon (尼龙吉他)</option>
+              <option value="26">Acoustic Guitar steel (钢弦吉他)</option>
+              <option value="41">Violin (小提琴)</option>
+              <option value="42">Viola (中提琴)</option>
+              <option value="43">Cello (大提琴)</option>
+              <option value="47">Harp (竖琴)</option>
+              <option value="57">Trumpet (小号)</option>
+              <option value="67">Tenor Sax (次中音萨克斯)</option>
+              <option value="69">Oboe (双簧管)</option>
+              <option value="72">Clarinet (单簧管)</option>
+              <option value="74">Flute (长笛)</option>
+              <option value="76">Pan Flute (排箫)</option>
+              <option value="80">Ocarina (陶笛)</option>
+            </select>
+          </div>
+          <div className="form-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={config.enableHarmony ?? true}
+                onChange={(e) => onConfigChange({ enableHarmony: e.target.checked })}
+                disabled={disabled || generating}
+              />
+              {" "}多乐器和声
+            </label>
+          </div>
+          <div className="form-row">
+            <label>
+              <input
+                type="checkbox"
+                checked={config.enableDrums ?? true}
+                onChange={(e) => onConfigChange({ enableDrums: e.target.checked })}
+                disabled={disabled || generating}
+              />
+              {" "}添加鼓点伴奏
+            </label>
+          </div>
+        </>
+      )}
       <div className="estimate-row">
         <span>预计体积: {estimate}</span>
         <span>{config.count} 个文件</span>

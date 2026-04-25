@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import Header from "./components/Header";
 import TabBar from "./components/TabBar";
 import ImageTab from "./components/ImageTab";
@@ -42,6 +44,13 @@ export default function App() {
       setProgress(event.payload);
     }).then((fn) => { unlisten = fn; });
     return () => { unlisten?.(); };
+  }, []);
+
+  // 自适应窗口高度：1080p@150% 缩放时缩小，其他情况用全高
+  useEffect(() => {
+    const availH = window.screen.availHeight;
+    const targetH = Math.min(700, availH - 48);
+    getCurrentWindow().setSize(new LogicalSize(560, targetH));
   }, []);
 
   const handleTabChange = useCallback((tab: MediaType) => {

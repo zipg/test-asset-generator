@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import type { ImageConfig, ImageFormat, ContentType } from "../types";
+import type { ImageConfig, ImageFormat, ImageContentType } from "../types";
 
 interface Props {
   config: ImageConfig;
@@ -20,7 +20,7 @@ const FORMAT_OPTIONS: ImageFormat[] = [
   "BMP",
   "TIFF",
 ];
-const CONTENT_OPTIONS: { value: ContentType; label: string }[] = [
+const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "noise", label: "随机噪声" },
   { value: "solid", label: "纯色" },
   { value: "gradient", label: "渐变" },
@@ -123,7 +123,7 @@ export default function ImageTab({
         <label>内容类型</label>
         <select
           value={config.contentType}
-          onChange={(e) => onConfigChange({ contentType: e.target.value as ContentType })}
+          onChange={(e) => onConfigChange({ contentType: e.target.value as ImageContentType })}
           disabled={disabled || generating}
         >
           {CONTENT_OPTIONS.map((opt) => (

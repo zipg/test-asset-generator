@@ -151,6 +151,11 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
     };
     let codec = if config.codec == "h264" { "libx264" } else { "libx265" };
     let duration_str = format_duration(config.duration);
+    let w = config.width;
+    let h = config.height;
+    let fps = config.fps;
+    // 画面动态 → 速度系数 0.2~2.0
+    let dyn_speed = config.dynamics as f64 / 5.0;
 
     for i in 1..=config.count {
         if get_cancel() {
@@ -160,31 +165,84 @@ pub fn generate_video(config: &VideoConfig, output_dir: &std::path::Path) -> Res
         let random_str = random_hex(6);
         let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
         let output_path = output_dir.join(&filename);
-
         let seed: u32 = rand::thread_rng().gen();
-        let hue: f32 = rand::thread_rng().gen_range(0.0..360.0);
 
+        // —— 音频可视化：生成临时音频 + showwaves ——
+        if config.content_type == "audioviz" {
+            let temp_audio = output_dir.join(format!("viza_{}.wav", random_str));
+            // 用 FFmpeg 多正弦波混合快速生成音频
+            let audio_filter = format!(
+                "sine=f=261.63:r=44100:d={dur},sine=f=329.63:r=44100:d={dur},sine=f=392.00:r=44100:d={dur},amix=inputs=3:duration=first",
+                dur = duration_str
+            );
+            let audio_args: Vec<String> = vec![
+                "-f".to_string(), "lavfi".to_string(),
+                "-i".to_string(), audio_filter,
+                "-ac".to_string(), "1".to_string(),
+                "-y".to_string(),
+                temp_audio.to_str().unwrap().to_string(),
+            ];
+            ffmpeg::run_ffmpeg_for_app(None, &audio_args, 15)?;
+
+            let viz_args: Vec<String> = vec![
+                "-i".to_string(), temp_audio.to_str().unwrap().to_string(),
+                "-filter_complex".to_string(), format!(
+                    "[0:a]showwaves=s={w}x{h}:mode=cline:rate={fps}:scale=sqrt:colors=random,format=yuv420p[v]",
+                ),
+                "-map".to_string(), "[v]".to_string(),
+                "-c:v".to_string(), codec.to_string(),
+                "-pix_fmt".to_string(), "yuv420p".to_string(),
+                "-t".to_string(), duration_str.clone(),
+                "-y".to_string(),
+                output_path.to_str().unwrap().to_string(),
+            ];
+            ffmpeg::run_ffmpeg_for_app(None, &viz_args, 30)
+                .map_err(|e| format!("{}: {}", filename, e))?;
+            let _ = std::fs::remove_file(&temp_audio);
+            continue;
+        }
+
+        // —— 其他类型：lavfi 滤镜链 ——
         let filter = match config.content_type.as_str() {
-            "solid" => format!(
-                "color=c=0x{:06x}:s={}x{}:d={}[v]",
-                (hue / 360.0 * 16777215.0) as u32,
-                config.width, config.height, duration_str
-            ),
             "gradient" => format!(
-                "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}[v]",
-                config.width, config.height, seed, duration_str
+                "gradients=s={w}x{h}:c0=random:c1=random:seed={seed}:d={dur},setpts={sp}*PTS[v]",
+                dur = duration_str, sp = 1.0 / dyn_speed
             ),
             "pattern" => format!(
-                "testsrc2=size={}x{}[v]",
-                config.width, config.height
+                "testsrc2=size={w}x{h},setpts={sp}*PTS[v]",
+                sp = 1.0 / dyn_speed
             ),
+            "plasma" => format!(
+                "geq=r='128+127*sin(X/60+T*{d}*2)*cos(Y/50+T*{d}*1.7)':g='128+127*sin(Y/70+T*{d}*2.2)*cos(X/55+T*{d}*1.5)':b='128+127*cos(X/65+T*{d}*1.9)*sin(Y/45+T*{d}*2.3)',format=yuv420p,scale={w}:{h}[v]",
+                d = dyn_speed
+            ),
+            "waves" => format!(
+                "geq=r='128+120*sin(Y/20+T*{d}*2)':g='128+120*sin(X/25+T*{d}*2.5)':b='200+55*sin((X+Y)/30+T*{d}*3)',format=yuv420p,scale={w}:{h}[v]",
+                d = dyn_speed
+            ),
+            "kaleidoscope" => format!(
+                "geq=r='128+127*sin(X/35+T*{d})*cos(Y/35+T*{d})':g='128+127*sin(Y/35+T*{d}+1.571)*cos(X/35+T*{d}+0.785)':b='128+127*cos((X+Y)/45+T*{d}+3.142)*sin(abs(X-Y)/45+T*{d}+1.047)',format=yuv420p[w];[w]split=2[a][b];[a]hflip[c];[b][c]hstack[top];[top]split=2[p][q];[q]vflip[r];[p][r]vstack[v]",
+                d = dyn_speed
+            ),
+            "fractal" => {
+                let src = if seed % 2 == 0 { "mandelbrot" } else { "julia" };
+                format!(
+                    "{src}=rate={fps}:size={w}x{h},zoompan=z='zoom+0.002*{d}':d=125:x='iw/2':y='ih/2',fps={fps},setpts=PTS[vs];[vs]scale={w}:{h}[v]",
+                    d = dyn_speed
+                )
+            },
+            "life" => format!(
+                "life=size={w}x{h}:rate={fps}:mold=10:ratio=0.5:death_color=MidnightBlue:life_color=white:seed={seed},fps={fps},setpts={sp}*PTS[v]",
+                sp = 1.0 / dyn_speed
+            ),
+            // noise (cellauto) / fallback
             _ => format!(
-                "cellauto=rule=18:seed={}:size={}x{}:pattern=random,scale={}:{}:flags=neighbor[v];[v]framerate=fps={}[v]",
-                seed, config.width, config.height, config.width, config.height, config.fps
+                "cellauto=rule=18:seed={seed}:size={w}x{h}:pattern=random,scale={w}:{h}:flags=neighbor,setpts={sp}*PTS,fps={fps}[v]",
+                sp = 1.0 / dyn_speed
             ),
         };
 
-        let fps_str = config.fps.to_string();
+        let fps_str = fps.to_string();
         let args: Vec<String> = vec![
             "-f".to_string(), "lavfi".to_string(),
             "-i".to_string(), filter,
@@ -246,13 +304,17 @@ pub fn generate_single_music(
     let bpm_variation = rand::thread_rng().gen_range(0.8..1.2);
     let actual_bpm = (config.bpm as f64 * bpm_variation) as u32;
 
-    // 如果启用 FluidSynth 且 SoundFont 可用，使用 FluidSynth 渲染
-    if config.use_fluidsynth {
+    // 如果使用 FluidSynth 引擎且 SoundFont 可用，使用 FluidSynth 渲染
+    if config.sound_engine == "fluidsynth" {
         if let Some(soundfont_path) = crate::fluidsynth_render::check_soundfont_exists(app) {
             let temp_wav = output_dir.join(format!("temp_{}.wav", random_str));
 
-            // 随机选择乐器
-            let (instrument, _name) = crate::fluidsynth_render::random_instrument();
+            // 乐器选择
+            let instrument: u8 = if config.instrument == "random" {
+                crate::fluidsynth_render::random_instrument().0
+            } else {
+                config.instrument.parse().unwrap_or(0)
+            };
 
             match crate::fluidsynth_render::render_with_fluidsynth(
                 &transposed,
@@ -262,7 +324,8 @@ pub fn generate_single_music(
                 &temp_wav,
                 44100,
                 instrument,
-                true, // 启用鼓点
+                config.enable_drums,
+                config.enable_harmony,
                 config.gain_db,
             ) {
                 Ok(_) => {

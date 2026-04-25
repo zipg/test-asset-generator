@@ -42,6 +42,9 @@ pub struct VideoConfig {
     pub prefix: String,
     #[serde(default = "default_add_audio_track")]
     pub add_audio_track: bool,
+    /// 画面动态强度 1-10
+    #[serde(default = "default_video_dynamics")]
+    pub dynamics: u32,
     /// 与音频 tab 一致：noise | rhythm | notes | random_music
     #[serde(default = "default_audio_content")]
     pub audio_content: String,
@@ -57,6 +60,16 @@ pub struct MusicConfig {
     pub count: u32,
     pub prefix: String,
     pub use_fluidsynth: bool,
+    /// "fluidsynth" | "simple"
+    #[serde(default = "default_sound_engine")]
+    pub sound_engine: String,
+    /// "random" 或 GM 乐器 program_id 字符串
+    #[serde(default = "default_instrument")]
+    pub instrument: String,
+    #[serde(default = "default_enable_drums")]
+    pub enable_drums: bool,
+    #[serde(default = "default_enable_harmony")]
+    pub enable_harmony: bool,
     #[serde(default)]
     pub gain_db: f64, // 音量增益 0–10 dB
 }
@@ -83,6 +96,26 @@ fn default_add_audio_track() -> bool {
     true
 }
 
+fn default_sound_engine() -> String {
+    "fluidsynth".to_string()
+}
+
+fn default_instrument() -> String {
+    "random".to_string()
+}
+
+fn default_enable_drums() -> bool {
+    true
+}
+
+fn default_enable_harmony() -> bool {
+    true
+}
+
+fn default_video_dynamics() -> u32 {
+    5
+}
+
 fn default_music_config() -> MusicConfig {
     MusicConfig {
         format: "MP3".to_string(),
@@ -92,6 +125,10 @@ fn default_music_config() -> MusicConfig {
         count: 10,
         prefix: "音乐".to_string(),
         use_fluidsynth: true,
+        sound_engine: "fluidsynth".to_string(),
+        instrument: "random".to_string(),
+        enable_drums: true,
+        enable_harmony: true,
         gain_db: 0.0,
     }
 }
@@ -130,6 +167,7 @@ impl Default for AppConfig {
                 prefix: "测试视频".to_string(),
                 add_audio_track: true,
                 audio_content: "random_music".to_string(),
+                dynamics: 5,
             },
             music_config: default_music_config(),
         }

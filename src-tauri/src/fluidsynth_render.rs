@@ -1,6 +1,6 @@
 /// FluidSynth 音频渲染模块
 /// 使用 oxisynth (纯 Rust 实现的 FluidSynth)
-/// 支持多种音色、鼓点、音量增益、循环播放
+/// 支持多种音色、鼓点、音量增益、多乐器和声、循环播放
 
 use std::path::Path;
 use oxisynth::{SoundFont, Synth, MidiEvent};
@@ -44,27 +44,89 @@ pub fn random_instrument() -> (u8, &'static str) {
     GM_INSTRUMENTS[idx]
 }
 
-/// 生成鼓点模式
+/// 挑选一个与主乐器不同且搭配和谐的副乐器
+fn pick_harmony_instrument(main: u8) -> u8 {
+    // 按乐器家族分组，跨家族搭配更丰富
+    let mut rng = rand::thread_rng();
+    let candidates: Vec<u8> = GM_INSTRUMENTS.iter()
+        .map(|(id, _)| *id)
+        .filter(|id| *id != main)
+        .collect();
+    if candidates.is_empty() { return 0; }
+    // 偏向选择不同家族的乐器
+    if rng.gen_bool(0.7) {
+        // 优先选择相距较远的乐器（不同家族）
+        let far: Vec<u8> = candidates.iter()
+            .filter(|id| (*id / 8) != (main / 8))
+            .copied()
+            .collect();
+        if !far.is_empty() {
+            return far[rng.gen_range(0..far.len())];
+        }
+    }
+    candidates[rng.gen_range(0..candidates.len())]
+}
+
+/// 生成更丰富的鼓点模式（多种鼓音色随机化）
 fn generate_drum_pattern(bpm: u32, bars: u32) -> Vec<(f32, u8, u8)> {
     let beat_duration = 60.0 / bpm as f32;
     let mut drums = Vec::new();
+    let mut rng = rand::thread_rng();
 
     for bar in 0..bars {
         let bar_start = bar as f32 * 4.0 * beat_duration;
         for beat in 0..4 {
             let beat_time = bar_start + beat as f32 * beat_duration;
+
+            // Bass Drum: 强拍/次强拍力度大，弱拍力度小
+            let bd_note = if rng.gen_bool(0.4) { 35 } else { 36 }; // Acoustic 或 Bass Drum 1
             if beat == 0 || beat == 2 {
-                drums.push((beat_time, 36, 90)); // Bass Drum
-            } else {
-                drums.push((beat_time, 36, 60));
+                drums.push((beat_time, bd_note, 80 + rng.gen_range(0..15)));
+            } else if rng.gen_bool(0.3) {
+                drums.push((beat_time, bd_note, 40 + rng.gen_range(0..20)));
             }
+
+            // Snare: 第2、4拍
+            let sn_note = if rng.gen_bool(0.3) { 40 } else { 38 }; // Electric 或 Acoustic Snare
             if beat == 1 || beat == 3 {
-                drums.push((beat_time, 38, 80)); // Snare
+                drums.push((beat_time, sn_note, 70 + rng.gen_range(0..20)));
             }
-            drums.push((beat_time, 42, 50)); // Closed HH
-            drums.push((beat_time + 0.5 * beat_duration, 42, 40));
+
+            // Hi-Hat / Ride: 八分音符基础节奏
+            let hh_note = if rng.gen_bool(0.25) { 51 } else { 42 }; // Ride Cymbal 1 或 Closed HH
+            drums.push((beat_time, hh_note, 40 + rng.gen_range(0..25)));
+            drums.push((beat_time + 0.5 * beat_duration, hh_note, 30 + rng.gen_range(0..20)));
+
+            // Open HH 在偶数小节末尾
             if bar % 2 == 1 && beat == 3 {
-                drums.push((beat_time + 0.5 * beat_duration, 46, 70)); // Open HH
+                drums.push((beat_time + 0.5 * beat_duration, 46, 55 + rng.gen_range(0..15)));
+            }
+
+            // 每小节第1拍加 Crash Cymbal 点缀（概率）
+            if beat == 0 && rng.gen_bool(0.3) {
+                let crash = if rng.gen_bool(0.5) { 49 } else { 57 }; // Crash 1 或 Crash 2
+                drums.push((beat_time, crash, 50 + rng.gen_range(0..20)));
+            }
+
+            // 随机加 Toms（概率低）
+            if rng.gen_bool(0.15) {
+                let tom = [41, 43, 45, 47, 48, 50][rng.gen_range(0..6)];
+                drums.push((beat_time, tom, 45 + rng.gen_range(0..25)));
+            }
+
+            // 偶尔加打击乐点缀
+            if rng.gen_bool(0.08) {
+                let perc = [39, 54, 56, 62, 63][rng.gen_range(0..5)]; // Hand Clap, Tambourine, Cowbell, Congas
+                drums.push((beat_time, perc, 35 + rng.gen_range(0..20)));
+            }
+        }
+
+        // 小节末尾偶尔加 Fill（几个 Toms 连击）
+        if rng.gen_bool(0.12) {
+            let fill_start = bar_start + 3.0 * beat_duration;
+            let toms: Vec<u8> = vec![50, 48, 45, 43, 41];
+            for (j, tom) in toms.iter().enumerate() {
+                drums.push((fill_start + j as f32 * 0.15, *tom, 50 + rng.gen_range(0..20)));
             }
         }
     }
@@ -72,7 +134,7 @@ fn generate_drum_pattern(bpm: u32, bars: u32) -> Vec<(f32, u8, u8)> {
     drums
 }
 
-/// 使用 FluidSynth 渲染，支持自然 BPM + 循环 + 增益
+/// 使用 FluidSynth 渲染，支持多乐器和声 + 丰富鼓点 + 循环 + 增益
 pub fn render_with_fluidsynth(
     notes: &[(f32, f32)],
     bpm: u32,
@@ -82,6 +144,7 @@ pub fn render_with_fluidsynth(
     sample_rate: u32,
     instrument: u8,
     enable_drums: bool,
+    enable_harmony: bool,
     gain_db: f64,
 ) -> Result<(), String> {
     let mut synth = Synth::new(oxisynth::SynthDescriptor {
@@ -103,23 +166,53 @@ pub fn render_with_fluidsynth(
         return Err("Empty melody".to_string());
     }
 
+    let mut rng = rand::thread_rng();
+
     // 生成单次遍历的 MIDI 事件
     let mut one_pass_events: Vec<(f32, MidiEvent)> = Vec::new();
 
-    // Program Change
+    // Program Change — Channel 0 主旋律
     one_pass_events.push((0.0, MidiEvent::ProgramChange {
         channel: 0,
         program_id: instrument,
     }));
 
-    // 主旋律 (Channel 0)
+    // 和声乐器 — Channel 1
+    let harmony_instrument = pick_harmony_instrument(instrument);
+    if enable_harmony {
+        one_pass_events.push((0.0, MidiEvent::ProgramChange {
+            channel: 1,
+            program_id: harmony_instrument,
+        }));
+    }
+
+    // 主旋律 (Channel 0) + 和声 (Channel 1)
     let mut t = 0.0;
     for (freq, dur) in notes {
         let midi = freq_to_midi_note(*freq);
         let secs = (*dur as f64 * beat_duration) as f32;
-        let vel = 70 + rand::thread_rng().gen_range(0..20);
+        let vel = 65 + rng.gen_range(0..20);
+
+        // 主旋律
         one_pass_events.push((t, MidiEvent::NoteOn { channel: 0, key: midi, vel }));
-        one_pass_events.push((t + secs * 0.95, MidiEvent::NoteOff { channel: 0, key: midi }));
+        one_pass_events.push((t + secs * 0.92, MidiEvent::NoteOff { channel: 0, key: midi }));
+
+        if enable_harmony {
+            // 三度和声 (Channel 1): 旋律上方 4 个半音（大三度）
+            let third = (midi as i16 + 4).clamp(0, 127) as u8;
+            let hvel = vel.saturating_sub(10);
+            one_pass_events.push((t, MidiEvent::NoteOn { channel: 1, key: third, vel: hvel }));
+            one_pass_events.push((t + secs * 0.92, MidiEvent::NoteOff { channel: 1, key: third }));
+
+            // 五度和声 (Channel 1): 旋律上方 7 个半音，只在长音符上加
+            if *dur >= 1.0 {
+                let fifth = (midi as i16 + 7).clamp(0, 127) as u8;
+                let fvel = vel.saturating_sub(15);
+                one_pass_events.push((t, MidiEvent::NoteOn { channel: 1, key: fifth, vel: fvel }));
+                one_pass_events.push((t + secs * 0.92, MidiEvent::NoteOff { channel: 1, key: fifth }));
+            }
+        }
+
         t += secs;
     }
 
@@ -128,13 +221,13 @@ pub fn render_with_fluidsynth(
         let bars = ((one_pass_time / (4.0 * beat_duration)).ceil() as u32).max(1);
         for (time, note, vel) in generate_drum_pattern(bpm, bars) {
             one_pass_events.push((time, MidiEvent::NoteOn { channel: 9, key: note, vel }));
-            one_pass_events.push((time + 0.15, MidiEvent::NoteOff { channel: 9, key: note }));
+            one_pass_events.push((time + 0.12, MidiEvent::NoteOff { channel: 9, key: note }));
         }
     }
 
     one_pass_events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-    // 如果一轮不够，循环生成多轮事件
+    // 循环生成多轮事件
     let num_loops = (duration / one_pass_time).ceil() as u32;
     let mut all_events: Vec<(f32, MidiEvent)> = Vec::new();
     let one_pass_f32 = one_pass_time as f32;
