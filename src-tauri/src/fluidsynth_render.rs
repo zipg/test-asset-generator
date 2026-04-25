@@ -193,7 +193,7 @@ pub fn render_with_fluidsynth(
             channel: 1,
             program_id: harmony_instrument,
         }));
-        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 7, value: 78 }));    // Volume: 较弱
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 7, value: 55 }));    // Volume: 明显弱于主旋律
         one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 10, value: 95 }));   // Pan: 偏右
         one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 91, value: 68 }));   // Reverb: 更深
         one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 93, value: 18 }));   // Chorus: 轻
@@ -208,13 +208,15 @@ pub fn render_with_fluidsynth(
         let vel = 65 + rng.gen_range(0..20);
 
         // 主旋律
-        // 长音符加颤音
-        if *dur >= 1.0 {
-            one_pass_events.push((t - 0.005, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: 50 }));
+        // 长音符随机加颤音（35%概率），强度随机变化
+        let use_vibrato = *dur >= 1.0 && rng.gen_bool(0.35);
+        if use_vibrato {
+            let vib_strength = 35 + rng.gen_range(0..35); // 35-69 随机强度
+            one_pass_events.push((t - 0.005, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: vib_strength }));
         }
         one_pass_events.push((t, MidiEvent::NoteOn { channel: 0, key: midi, vel }));
         one_pass_events.push((t + secs * 0.92, MidiEvent::NoteOff { channel: 0, key: midi }));
-        if *dur >= 1.0 {
+        if use_vibrato {
             one_pass_events.push((t + secs * 0.92 + 0.005, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: 22 }));
         }
 
@@ -235,6 +237,53 @@ pub fn render_with_fluidsynth(
         }
 
         t += secs;
+    }
+
+    // ====== 乐器变换: 每8-16小节切换到同类乐器 ======
+    let instrument_families: &[(u8, &[u8])] = &[
+        // 钢琴类
+        (0, &[0, 1, 2, 3, 4, 5, 6, 7, 8]),
+        // 吉他类
+        (25, &[25, 26, 27, 28, 29, 30]),
+        // 弦乐类
+        (41, &[41, 42, 43, 44, 45, 47]),
+        // 木管类
+        (74, &[69, 72, 74, 76, 68, 71, 73]),
+        // 铜管类
+        (57, &[57, 58, 59, 60, 61, 67, 68]),
+        // 打击/色彩类
+        (11, &[11, 12, 13, 14, 15, 9, 10, 46]),
+    ];
+    let family = instrument_families.iter()
+        .find(|(_, members)| members.contains(&instrument))
+        .map(|(_, members)| *members)
+        .unwrap_or(&[]);
+    if !family.is_empty() {
+        let bars_in_pass = ((one_pass_time / (4.0 * beat_duration)).ceil() as u32).max(1);
+        let switch_interval_bars = 8 + rng.gen_range(0..9); // 每 8-16 小节切换
+        let mut switch_times: Vec<(f32, u8)> = Vec::new();
+        for bar in (switch_interval_bars..bars_in_pass).step_by(switch_interval_bars as usize) {
+            if rng.gen_bool(0.6) { // 60% 概率在此小节切换
+                let t = bar as f32 * 4.0 * beat_duration as f32;
+                let mut idx = rng.gen_range(0..family.len());
+                let mut new_inst = family[idx];
+                // 避免切到当前乐器或和声乐器
+                let mut attempts = 0;
+                while (new_inst == instrument || new_inst == harmony_instrument) && attempts < 10 {
+                    idx = rng.gen_range(0..family.len());
+                    new_inst = family[idx];
+                    attempts += 1;
+                }
+                if new_inst != instrument && new_inst != harmony_instrument {
+                    switch_times.push((t, new_inst));
+                }
+            }
+        }
+        for (t, inst) in &switch_times {
+            one_pass_events.push((*t, MidiEvent::ProgramChange { channel: 0, program_id: *inst }));
+            let new_vol = 100 + rng.gen_range(0..21);
+            one_pass_events.push((*t, MidiEvent::ControlChange { channel: 0, ctrl: 7, value: new_vol }));
+        }
     }
 
     // 鼓点 (Channel 9)
