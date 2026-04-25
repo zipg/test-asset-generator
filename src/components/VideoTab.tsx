@@ -210,16 +210,19 @@ export default function VideoTab({
         </select>
       </div>
       <div className="form-row">
-        <label>画面动态: {config.dynamics ?? 5}</label>
-        <input
-          type="range"
-          value={config.dynamics ?? 5}
-          min={1}
-          max={10}
-          step={1}
-          onChange={(e) => onConfigChange({ dynamics: parseInt(e.target.value) })}
-          disabled={disabled || generating}
-        />
+        <label>画面动态</label>
+        <div className="range-with-value">
+          <input
+            type="range"
+            value={config.dynamics ?? 5}
+            min={1}
+            max={10}
+            step={1}
+            onChange={(e) => onConfigChange({ dynamics: parseInt(e.target.value) })}
+            disabled={disabled || generating}
+          />
+          <span className="range-value">{config.dynamics ?? 5}</span>
+        </div>
       </div>
       <div className="form-row">
         <label>增加音频</label>

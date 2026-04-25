@@ -781,36 +781,73 @@ async fn generate_videos(
 
             let seed: u32 = unique_seed();
 
+            let speed = config.dynamics as f32 / 5.0;
+            let w = config.width;
+            let h = config.height;
+            let f = config.fps;
             let filter = match config.content_type.as_str() {
                 "solid" => {
-                    // Use seed to ensure unique colors
                     let color_hue = (seed % 360) as f32;
                     format!(
                         "color=c=0x{:06x}:s={}x{}:d={}",
                         (color_hue / 360.0 * 16777215.0) as u32,
-                        config.width, config.height, duration_str
+                        w, h, duration_str
                     )
                 }
                 "gradient" => format!(
                     "gradients=s={}x{}:c0=random:c1=random:seed={}:d={}",
-                    config.width, config.height, seed, duration_str
+                    w, h, seed, duration_str
                 ),
                 "pattern" => format!(
-                    "testsrc2=size={}x{}:rate={}:duration={},hue=h={}",
-                    config.width,
-                    config.height,
-                    config.fps,
-                    duration_str,
-                    (seed % 360) as f32
+                    "testsrc2=size={}x{}:rate={}:duration={},hue=H=t*{}",
+                    w, h, f, duration_str,
+                    (seed % 180 + 60) as f32 * speed
                 ),
-                _ => {
-                    // Use random_fill_ratio to ensure unique output - pattern=random ignores seed
+                "noise" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N)*255':g='random(Y+N*2)*255':b='random(X*Y+N*3)*255'",
+                    w, h, f, duration_str
+                ),
+                "plasma" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s})*cos(Y/H*6.283+T*{s}*0.7)':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3)*cos((X-Y)/(W+H)*9.425+T*{s}*0.9)':b='128+127*cos(X/W*7.854+T*{s}*0.8)*sin(Y/H*7.854+T*{s}*1.1)'",
+                    w, h, f, duration_str,
+                    s = speed * 2.0,
+                ),
+                "waves" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s})*cos(X/20)':g='128+100*cos(X/15+T*{s}*1.2)*sin(Y/18)':b='128+100*sin((X+Y)/18+T*{s}*1.4)'",
+                    w, h, f, duration_str,
+                    s = speed * 2.0,
+                ),
+                "kaleidoscope" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s})*sin(hypot(X-W/2,Y-H/2)/18)':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8)*sin(hypot(X-W/2,Y-H/2)/18)':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1)*sin(hypot(X-W/2,Y-H/2)/18)'",
+                    w, h, f, duration_str,
+                    s = speed * 2.0,
+                ),
+                "fractal" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='clip(abs(sin((X/W+cos(T*{s}*0.3))*PI*8+T*{s}))*340,0,255)':g='clip(abs(cos((Y/H+sin(T*{s}*0.4))*PI*8+T*{s}*0.7))*340,0,255)':b='clip(abs(sin(((X-Y)/max(W,H))*PI*12+T*{s}*1.2))*340,0,255)'",
+                    w, h, f, duration_str,
+                    s = speed * 2.0,
+                ),
+                "life" => {
                     let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
                     let rule = rules[(seed % rules.len() as u32) as usize];
                     let fill_ratio = 0.3 + (seed % 50) as f64 / 100.0;
                     format!(
                         "cellauto=rule={}:size={}x{}:random_seed={}:random_fill_ratio={},scale={}:{}:flags=neighbor",
-                        rule, config.width, config.height, seed, fill_ratio, config.width, config.height
+                        rule, w, h, seed, fill_ratio, w, h
+                    )
+                },
+                "audioviz" => format!(
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5))+0.03),40,0)'",
+                    w, h, f, duration_str,
+                    s = speed * 2.0,
+                ),
+                _ => {
+                    let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
+                    let rule = rules[(seed % rules.len() as u32) as usize];
+                    let fill_ratio = 0.3 + (seed % 50) as f64 / 100.0;
+                    format!(
+                        "cellauto=rule={}:size={}x{}:random_seed={}:random_fill_ratio={},scale={}:{}:flags=neighbor",
+                        rule, w, h, seed, fill_ratio, w, h
                     )
                 },
             };
@@ -1096,6 +1133,11 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
             width,
             height,
             (seed % 360) as f32
+        ),
+        "noise" => format!(
+            "nullsrc=size={}x{}:rate=1,geq=r='random(X+{s})*255':g='random(Y+{s}*2)*255':b='random(X*Y+{s}*3)*255'",
+            width, height,
+            s = seed,
         ),
         _ => {
             // Use random_fill_ratio to ensure unique output - pattern=random ignores seed

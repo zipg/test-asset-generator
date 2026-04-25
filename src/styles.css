@@ -245,6 +245,23 @@ body {
   min-width: 0;
 }
 
+.range-with-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.range-value {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #86868b;
+  font-weight: 500;
+  min-width: 20px;
+  text-align: right;
+}
+
 .gain-tag {
   flex: 0 0 auto;
   font-size: 12px;
