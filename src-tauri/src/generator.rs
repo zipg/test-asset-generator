@@ -223,21 +223,19 @@ pub fn generate_single_music(
     let filename = format!("{}_{:03}_{}.{}", config.prefix, file_index, random_str, ext);
     let output_path = output_dir.join(&filename);
 
-    // 获取旋律：从音乐库随机选择主题，扩展为完整 A-B-A 乐谱
+    // 获取旋律：从音乐库选择真实完整乐谱
     let melody = if config.melody == "random" || config.melody == "library" {
         let all_music = crate::music_library::get_all_music();
         if !all_music.is_empty() {
             let idx = rand::thread_rng().gen_range(0..all_music.len());
-            let theme = (all_music[idx].notes)();
-            // 将主题扩展为完整 A-B-A 结构（30音符 → ~250音符）
-            melody::expand_to_aba(&theme)
+            (all_music[idx].notes)()
         } else {
-            melody::expand_to_aba(&melody::get_melody_by_template("random"))
+            melody::get_melody_by_template("random")
         }
     } else if let Some(theme) = crate::music_library::get_music_by_id(&config.melody) {
-        melody::expand_to_aba(&theme)
+        theme
     } else {
-        melody::expand_to_aba(&melody::get_melody_by_template(&config.melody))
+        melody::get_melody_by_template(&config.melody)
     };
 
     // 随机移调 -6 到 +6 半音
@@ -265,6 +263,7 @@ pub fn generate_single_music(
                 44100,
                 instrument,
                 true, // 启用鼓点
+                config.gain_db,
             ) {
                 Ok(_) => {
                     // 如果需要转换格式，使用 FFmpeg

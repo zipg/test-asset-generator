@@ -80,6 +80,7 @@ export interface MusicConfig {
   count: number;
   prefix: string;
   useFluidsynth: boolean;
+  gainDb: number;
 }
 
 export interface AppConfig {

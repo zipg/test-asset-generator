@@ -60,9 +60,6 @@ export default function MusicTab({
 
   return (
     <div className="tab-panel">
-      <div className="experimental-notice">
-        ⚠️ 实验性功能：使用 FFmpeg sine 滤镜生成简单旋律，音色为纯正弦波（类似 8-bit 游戏音乐）
-      </div>
       <div className="form-row">
         <label>格式</label>
         <select
@@ -94,6 +91,18 @@ export default function MusicTab({
           min={60}
           max={180}
           onChange={(e) => onConfigChange({ bpm: parseInt(e.target.value) || 120 })}
+          disabled={disabled || generating}
+        />
+      </div>
+      <div className="form-row">
+        <label>音量增益: {config.gainDb ?? 0} dB</label>
+        <input
+          type="range"
+          value={config.gainDb ?? 0}
+          min={0}
+          max={10}
+          step={0.5}
+          onChange={(e) => onConfigChange({ gainDb: parseFloat(e.target.value) })}
           disabled={disabled || generating}
         />
       </div>

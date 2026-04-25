@@ -1,6 +1,6 @@
 /// FluidSynth 音频渲染模块
 /// 使用 oxisynth (纯 Rust 实现的 FluidSynth)
-/// 支持多种音色和鼓点
+/// 支持多种音色、鼓点、音量增益、循环播放
 
 use std::path::Path;
 use oxisynth::{SoundFont, Synth, MidiEvent};
@@ -44,46 +44,35 @@ pub fn random_instrument() -> (u8, &'static str) {
     GM_INSTRUMENTS[idx]
 }
 
-/// 生成鼓点模式（时间偏移 + MIDI 音符）
-/// 返回 (时间偏移_拍数, MIDI鼓音符, 力度)
-pub fn generate_drum_pattern(bpm: u32, bars: u32) -> Vec<(f32, u8, u8)> {
+/// 生成鼓点模式
+fn generate_drum_pattern(bpm: u32, bars: u32) -> Vec<(f32, u8, u8)> {
     let beat_duration = 60.0 / bpm as f32;
     let mut drums = Vec::new();
 
     for bar in 0..bars {
         let bar_start = bar as f32 * 4.0 * beat_duration;
-
         for beat in 0..4 {
             let beat_time = bar_start + beat as f32 * beat_duration;
-
-            // 每拍大鼓（1、3拍重）
             if beat == 0 || beat == 2 {
                 drums.push((beat_time, 36, 90)); // Bass Drum
             } else {
                 drums.push((beat_time, 36, 60));
             }
-
-            // 小鼓（2、4拍）
             if beat == 1 || beat == 3 {
-                drums.push((beat_time, 38, 80)); // Acoustic Snare
+                drums.push((beat_time, 38, 80)); // Snare
             }
-
-            // 闭镲（每半拍）
-            drums.push((beat_time, 42, 50)); // Closed Hi-Hat
+            drums.push((beat_time, 42, 50)); // Closed HH
             drums.push((beat_time + 0.5 * beat_duration, 42, 40));
-
-            // 开镲（每2小节结尾）
             if bar % 2 == 1 && beat == 3 {
-                drums.push((beat_time + 0.5 * beat_duration, 46, 70)); // Open Hi-Hat
+                drums.push((beat_time + 0.5 * beat_duration, 46, 70)); // Open HH
             }
         }
     }
-
     drums.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
     drums
 }
 
-/// 使用 FluidSynth 渲染音符序列为音频（支持多音色和鼓点）
+/// 使用 FluidSynth 渲染，支持自然 BPM + 循环 + 增益
 pub fn render_with_fluidsynth(
     notes: &[(f32, f32)],
     bpm: u32,
@@ -93,6 +82,7 @@ pub fn render_with_fluidsynth(
     sample_rate: u32,
     instrument: u8,
     enable_drums: bool,
+    gain_db: f64,
 ) -> Result<(), String> {
     let mut synth = Synth::new(oxisynth::SynthDescriptor {
         sample_rate: sample_rate as f32,
@@ -103,124 +93,119 @@ pub fn render_with_fluidsynth(
         .map_err(|e| format!("Failed to open soundfont: {:?}", e))?;
     let soundfont = SoundFont::load(&mut file)
         .map_err(|e| format!("Failed to load soundfont: {:?}", e))?;
-
     synth.add_font(soundfont, true);
 
     let beat_duration = 60.0 / bpm as f64;
     let total_beats: f32 = notes.iter().map(|(_, dur)| dur).sum();
-    let scale_factor = duration / (total_beats as f64 * beat_duration);
+    let one_pass_time = total_beats as f64 * beat_duration;
 
-    // 生成 MIDI 事件
-    let mut events = Vec::new();
+    if one_pass_time <= 0.0 {
+        return Err("Empty melody".to_string());
+    }
 
-    // Program Change: 选择乐器（Channel 0）
-    events.push((0.0, MidiEvent::ProgramChange {
+    // 生成单次遍历的 MIDI 事件
+    let mut one_pass_events: Vec<(f32, MidiEvent)> = Vec::new();
+
+    // Program Change
+    one_pass_events.push((0.0, MidiEvent::ProgramChange {
         channel: 0,
         program_id: instrument,
     }));
 
-    // 主旋律音符（Channel 0）
-    let mut current_time = 0.0;
-    for (freq, note_duration) in notes {
-        let midi_note = freq_to_midi_note(*freq);
-        let duration_secs = (*note_duration as f64 * beat_duration * scale_factor) as f32;
-        let velocity = 70 + rand::thread_rng().gen_range(0..20); // 微小力度变化
-
-        events.push((current_time, MidiEvent::NoteOn {
-            channel: 0,
-            key: midi_note,
-            vel: velocity,
-        }));
-        events.push((current_time + duration_secs * 0.95, MidiEvent::NoteOff {
-            channel: 0,
-            key: midi_note,
-        }));
-        current_time += duration_secs;
+    // 主旋律 (Channel 0)
+    let mut t = 0.0;
+    for (freq, dur) in notes {
+        let midi = freq_to_midi_note(*freq);
+        let secs = (*dur as f64 * beat_duration) as f32;
+        let vel = 70 + rand::thread_rng().gen_range(0..20);
+        one_pass_events.push((t, MidiEvent::NoteOn { channel: 0, key: midi, vel }));
+        one_pass_events.push((t + secs * 0.95, MidiEvent::NoteOff { channel: 0, key: midi }));
+        t += secs;
     }
 
-    // 鼓点（Channel 9 = MIDI Channel 10）
+    // 鼓点 (Channel 9)
     if enable_drums {
-        let total_bars = (duration / (4.0 * beat_duration)).ceil() as u32;
-        let drum_pattern = generate_drum_pattern(bpm, total_bars.max(1));
+        let bars = ((one_pass_time / (4.0 * beat_duration)).ceil() as u32).max(1);
+        for (time, note, vel) in generate_drum_pattern(bpm, bars) {
+            one_pass_events.push((time, MidiEvent::NoteOn { channel: 9, key: note, vel }));
+            one_pass_events.push((time + 0.15, MidiEvent::NoteOff { channel: 9, key: note }));
+        }
+    }
 
-        for (time, drum_note, velocity) in &drum_pattern {
-            if *time < duration as f32 {
-                events.push((*time, MidiEvent::NoteOn {
-                    channel: 9,
-                    key: *drum_note,
-                    vel: *velocity,
-                }));
-                events.push((*time + 0.15, MidiEvent::NoteOff {
-                    channel: 9,
-                    key: *drum_note,
-                }));
+    one_pass_events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+    // 如果一轮不够，循环生成多轮事件
+    let num_loops = (duration / one_pass_time).ceil() as u32;
+    let mut all_events: Vec<(f32, MidiEvent)> = Vec::new();
+    let one_pass_f32 = one_pass_time as f32;
+
+    for loop_idx in 0..num_loops {
+        let offset = loop_idx as f32 * one_pass_f32;
+        for (t, ev) in &one_pass_events {
+            let abs_time = offset + t;
+            if abs_time < duration as f32 {
+                all_events.push((abs_time, ev.clone()));
             }
         }
     }
 
-    // 排序事件
-    events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+    all_events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-    // 渲染音频
+    // 增益倍数
+    let gain_mult = 10.0_f64.powf(gain_db / 20.0) as f32;
+
+    // 渲染
     let total_samples = (duration * sample_rate as f64) as usize;
-    let mut audio_buffer = vec![0.0f32; total_samples * 2];
+    let mut buf = vec![0.0f32; total_samples * 2];
+    let mut ev_idx = 0;
+    let sps = sample_rate as f32;
 
-    let mut event_idx = 0;
-    let samples_per_sec = sample_rate as f32;
-
-    for sample_idx in 0..total_samples {
-        let current_time_sec = sample_idx as f32 / samples_per_sec;
-
-        while event_idx < events.len() && events[event_idx].0 <= current_time_sec {
-            synth.send_event(events[event_idx].1.clone())
+    for si in 0..total_samples {
+        let now = si as f32 / sps;
+        while ev_idx < all_events.len() && all_events[ev_idx].0 <= now {
+            synth.send_event(all_events[ev_idx].1.clone())
                 .map_err(|e| format!("Failed to send event: {:?}", e))?;
-            event_idx += 1;
+            ev_idx += 1;
         }
-
-        let mut stereo_buffer = [0.0f32, 0.0f32];
-        synth.write(&mut stereo_buffer[..]);
-
-        audio_buffer[sample_idx * 2] = stereo_buffer[0];
-        audio_buffer[sample_idx * 2 + 1] = stereo_buffer[1];
+        let mut sb = [0.0f32, 0.0f32];
+        synth.write(&mut sb[..]);
+        buf[si * 2] = (sb[0] * gain_mult).clamp(-1.0, 1.0);
+        buf[si * 2 + 1] = (sb[1] * gain_mult).clamp(-1.0, 1.0);
     }
 
-    write_wav_file(output_path, &audio_buffer, sample_rate)?;
+    write_wav(output_path, &buf, sample_rate)?;
     Ok(())
 }
 
-/// 写入 WAV 文件
-fn write_wav_file(path: &Path, samples: &[f32], sample_rate: u32) -> Result<(), String> {
+fn write_wav(path: &Path, samples: &[f32], sr: u32) -> Result<(), String> {
     use std::fs::File;
     use std::io::Write;
+    let mut f = File::create(path).map_err(|e| e.to_string())?;
+    let nc = 2u16;
+    let bps = 16u16;
+    let ns = (samples.len() / 2) as u32;
+    let br = sr * nc as u32 * bps as u32 / 8;
+    let ba = nc * bps / 8;
+    let ds = ns * nc as u32 * bps as u32 / 8;
 
-    let mut file = File::create(path).map_err(|e| e.to_string())?;
+    f.write_all(b"RIFF").map_err(|e| e.to_string())?;
+    f.write_all(&(36 + ds).to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(b"WAVE").map_err(|e| e.to_string())?;
+    f.write_all(b"fmt ").map_err(|e| e.to_string())?;
+    f.write_all(&16u32.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&nc.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&sr.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&br.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&ba.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(&bps.to_le_bytes()).map_err(|e| e.to_string())?;
+    f.write_all(b"data").map_err(|e| e.to_string())?;
+    f.write_all(&ds.to_le_bytes()).map_err(|e| e.to_string())?;
 
-    let num_samples = samples.len() / 2;
-    let num_channels = 2u16;
-    let bits_per_sample = 16u16;
-    let byte_rate = sample_rate * num_channels as u32 * bits_per_sample as u32 / 8;
-    let block_align = num_channels * bits_per_sample / 8;
-    let data_size = (num_samples * num_channels as usize * bits_per_sample as usize / 8) as u32;
-
-    file.write_all(b"RIFF").map_err(|e| e.to_string())?;
-    file.write_all(&(36 + data_size).to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(b"WAVE").map_err(|e| e.to_string())?;
-    file.write_all(b"fmt ").map_err(|e| e.to_string())?;
-    file.write_all(&16u32.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(&1u16.to_le_bytes()).map_err(|e| e.to_string())?; // PCM
-    file.write_all(&num_channels.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(&sample_rate.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(&byte_rate.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(&block_align.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(&bits_per_sample.to_le_bytes()).map_err(|e| e.to_string())?;
-    file.write_all(b"data").map_err(|e| e.to_string())?;
-    file.write_all(&data_size.to_le_bytes()).map_err(|e| e.to_string())?;
-
-    for &sample in samples {
-        let sample_i16 = (sample.clamp(-1.0, 1.0) * 32767.0) as i16;
-        file.write_all(&sample_i16.to_le_bytes()).map_err(|e| e.to_string())?;
+    for &s in samples {
+        let v = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
+        f.write_all(&v.to_le_bytes()).map_err(|e| e.to_string())?;
     }
-
     Ok(())
 }
 

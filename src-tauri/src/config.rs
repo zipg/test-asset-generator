@@ -56,7 +56,9 @@ pub struct MusicConfig {
     pub melody: String,
     pub count: u32,
     pub prefix: String,
-    pub use_fluidsynth: bool, // 是否使用 FluidSynth 渲染
+    pub use_fluidsynth: bool,
+    #[serde(default)]
+    pub gain_db: f64, // 音量增益 0–10 dB
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,10 +88,11 @@ fn default_music_config() -> MusicConfig {
         format: "MP3".to_string(),
         duration: 30.0,
         bpm: 120,
-        melody: "scale".to_string(),
+        melody: "random".to_string(),
         count: 10,
         prefix: "音乐".to_string(),
-        use_fluidsynth: false, // 默认使用 FFmpeg sine
+        use_fluidsynth: true,
+        gain_db: 0.0,
     }
 }
 
