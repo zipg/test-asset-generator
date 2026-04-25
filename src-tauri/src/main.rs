@@ -212,101 +212,93 @@ async fn fetch_network_image_bytes(width: u32, height: u32, crop: bool) -> Resul
         format!("https://random.imagecdn.app/{}/{}", fetch_w, fetch_h),
     ];
 
-    let mut last_err = String::new();
+    let mut errors: Vec<String> = Vec::new();
     for url in &urls {
         match fetch_url_bytes(url).await {
             Ok(data) => return Ok(data),
-            Err(e) => {
-                last_err = e;
-                eprintln!("Network image source {} failed: {}", url, last_err);
-            }
+            Err(e) => errors.push(format!("{}: {}", url, e)),
         }
     }
-    Err(format!("所有网络图源均已耗尽: {}", last_err))
+    Err(format!("所有网络图源均不可用:\n{}", errors.join("\n")))
 }
 
-// Boudoir API 速率限制: 300s / 100次 / 超限封30分钟
+// Boudoir API 速率限制: 仅 ortlinde 有明确限制 (300s/100次/封30分钟)
 static BOUDOIR_TIMESTAMPS: Mutex<Option<Vec<Instant>>> = Mutex::new(None);
 
 async fn fetch_boudoir_image() -> Result<Vec<u8>, String> {
-    // 滑动窗口速率检查
-    {
-        let mut guard = BOUDOIR_TIMESTAMPS.lock().unwrap();
-        let timestamps = guard.get_or_insert_with(Vec::new);
-        let cutoff = Instant::now() - Duration::from_secs(300);
-        timestamps.retain(|t| *t > cutoff);
-        if timestamps.len() >= 100 {
-            return Err("本工具速率限制: 300秒内已达100次上限, 请稍后再试 (API限制 300s/100次/封30分钟)".to_string());
-        }
-        timestamps.push(Instant::now());
-    }
-
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
         .connect_timeout(Duration::from_secs(45))
         .build()
         .map_err(|e| format!("HTTP client: {}", e))?;
 
-    // 主 API: 直接返回图片
-    let response = client
-        .get("https://boudoir.ortlinde.com/random")
-        .send()
-        .await
-        .map_err(|e| format!("网络请求失败: {}", e))?;
+    let mut errors: Vec<String> = Vec::new();
 
-    match response.status().as_u16() {
-        200 => {
-            return response
-                .bytes()
-                .await
-                .map(|b| b.to_vec())
-                .map_err(|e| format!("读取响应失败: {}", e));
+    // 主 API: ortlinde (有明确频率限制: 300s/100次/封30分钟)
+    let ortlinde_ok = {
+        let mut guard = BOUDOIR_TIMESTAMPS.lock().unwrap();
+        let timestamps = guard.get_or_insert_with(Vec::new);
+        let cutoff = Instant::now() - Duration::from_secs(300);
+        timestamps.retain(|t| *t > cutoff);
+        if timestamps.len() >= 100 {
+            errors.push("ortlinde: 300秒内已达100次上限".to_string());
+            false
+        } else {
+            timestamps.push(Instant::now());
+            true
         }
-        403 => {
-            eprintln!("Boudoir primary returned 403, trying fallback");
-        }
-        429 => {
-            eprintln!("Boudoir primary returned 429, trying fallback");
-        }
-        other => {
-            eprintln!("Boudoir primary returned HTTP {}, trying fallback", other);
+    };
+
+    if ortlinde_ok {
+        match client
+            .get("https://boudoir.ortlinde.com/random")
+            .send()
+            .await
+        {
+            Ok(resp) => match resp.status().as_u16() {
+                200 => {
+                    return resp.bytes().await
+                        .map(|b| b.to_vec())
+                        .map_err(|e| format!("读取响应失败: {}", e));
+                }
+                403 => errors.push("ortlinde: IP已被临时封禁 (403)".to_string()),
+                429 => errors.push("ortlinde: 请求过于频繁 (429)".to_string()),
+                other => errors.push(format!("ortlinde: HTTP {}", other)),
+            },
+            Err(e) => errors.push(format!("ortlinde: {}", e)),
         }
     }
 
-    // 备用 API: 返回 JSON { "url": "..." }
-    let fallback_resp = client
+    // 备用 API 1: img.api.sld.tw (无已知频率限制)
+    match client
         .get("https://img.api.sld.tw/pic?json=h")
         .send()
         .await
-        .map_err(|e| format!("备用API请求失败: {}", e))?;
-
-    if !fallback_resp.status().is_success() {
-        return Err(format!("备用API返回 HTTP {}, 主API也不可用", fallback_resp.status()));
+    {
+        Ok(resp) if resp.status().is_success() => {
+            let body = resp.bytes().await
+                .map_err(|e| format!("读取备用API响应失败: {}", e))?;
+            let json: serde_json::Value = serde_json::from_slice(&body)
+                .map_err(|e| format!("解析备用API响应失败: {}", e))?;
+            if let Some(img_url) = json["url"].as_str() {
+                match client.get(img_url).send().await {
+                    Ok(r) if r.status().is_success() => {
+                        return r.bytes().await
+                            .map(|b| b.to_vec())
+                            .map_err(|e| format!("读取备用图片失败: {}", e));
+                    }
+                    Ok(r) => errors.push(format!("sld.tw 图片: HTTP {}", r.status())),
+                    Err(e) => errors.push(format!("sld.tw 图片: {}", e)),
+                }
+            } else {
+                errors.push("sld.tw: 未返回图片URL".to_string());
+            }
+        }
+        Ok(resp) => errors.push(format!("sld.tw: HTTP {}", resp.status())),
+        Err(e) => errors.push(format!("sld.tw: {}", e)),
     }
 
-    let body = fallback_resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取备用API响应失败: {}", e))?;
-
-    let json: serde_json::Value = serde_json::from_slice(&body)
-        .map_err(|e| format!("解析备用API响应失败: {}", e))?;
-
-    let img_url = json["url"]
-        .as_str()
-        .ok_or_else(|| "备用API未返回图片URL".to_string())?;
-
-    let img_bytes = client
-        .get(img_url)
-        .send()
-        .await
-        .map_err(|e| format!("获取备用图片失败: {}", e))?
-        .bytes()
-        .await
-        .map(|b| b.to_vec())
-        .map_err(|e| format!("读取备用图片失败: {}", e))?;
-
-    Ok(img_bytes)
+    Err(format!("所有18+接口均不可用:\n{}", errors.join("\n")))
 }
 
 async fn fetch_anime_image() -> Result<Vec<u8>, String> {
@@ -316,39 +308,39 @@ async fn fetch_anime_image() -> Result<Vec<u8>, String> {
         .build()
         .map_err(|e| format!("HTTP client: {}", e))?;
 
-    // 主: 直接返回 webp 图片
-    let resp = client
+    let mut errors: Vec<String> = Vec::new();
+
+    // 主: api.neix.in
+    match client
         .get("https://api.neix.in/random/mobile")
         .send()
         .await
-        .map_err(|e| format!("二次元API请求失败: {}", e))?;
-
-    if resp.status().is_success() {
-        return resp
-            .bytes()
-            .await
-            .map(|b| b.to_vec())
-            .map_err(|e| format!("读取二次元图片失败: {}", e));
+    {
+        Ok(resp) if resp.status().is_success() => {
+            return resp.bytes().await
+                .map(|b| b.to_vec())
+                .map_err(|e| format!("读取二次元图片失败: {}", e));
+        }
+        Ok(resp) => errors.push(format!("neix.in: HTTP {}", resp.status())),
+        Err(e) => errors.push(format!("neix.in: {}", e)),
     }
 
-    eprintln!("Anime primary returned HTTP {}, trying fallback", resp.status());
-
-    // 备用: 302 跳转到图片地址, reqwest 自动跟随
-    let fallback = client
+    // 备用: app.zichen.zone (302 跳转到图片地址, reqwest 自动跟随)
+    match client
         .get("https://app.zichen.zone/api/acg/api.php")
         .send()
         .await
-        .map_err(|e| format!("备用二次元API请求失败: {}", e))?;
-
-    if !fallback.status().is_success() {
-        return Err(format!("二次元API均不可用 (HTTP {})", fallback.status()));
+    {
+        Ok(resp) if resp.status().is_success() => {
+            return resp.bytes().await
+                .map(|b| b.to_vec())
+                .map_err(|e| format!("读取备用二次元图片失败: {}", e));
+        }
+        Ok(resp) => errors.push(format!("zichen.zone: HTTP {}", resp.status())),
+        Err(e) => errors.push(format!("zichen.zone: {}", e)),
     }
 
-    fallback
-        .bytes()
-        .await
-        .map(|b| b.to_vec())
-        .map_err(|e| format!("读取备用二次元图片失败: {}", e))
+    Err(format!("所有二次元接口均不可用:\n{}", errors.join("\n")))
 }
 
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
