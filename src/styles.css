@@ -282,6 +282,26 @@ body {
 .status-ok { color: #34c759; }
 .status-warn { color: #ff9500; }
 
+/* Expandable option links */
+.expand-link {
+  color: #0071e3;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 500;
+}
+.expand-link:hover {
+  color: #0077ed;
+}
+.expand-link.collapse {
+  margin-right: 4px;
+}
+.hint-text {
+  font-size: 12px;
+  color: #86868b;
+  margin-left: 8px;
+}
+
 /* Checkbox inline row */
 .checkbox-row {
   gap: 20px;

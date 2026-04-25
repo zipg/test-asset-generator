@@ -22,7 +22,7 @@ const FORMAT_OPTIONS: ImageFormat[] = [
 ];
 const SOURCE_OPTIONS: { value: ImageSource; label: string }[] = [
   { value: "generated", label: "程序生成" },
-  { value: "network", label: "网络获取" },
+  { value: "network", label: "云端生成" },
   { value: "anime", label: "二次元" },
   { value: "boudoir", label: "其它" },
 ];
@@ -33,7 +33,7 @@ const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "pattern", label: "图案(彩条)" },
 ];
 
-const ASPECT_RATIO = 16 / 9; // height / width for 9:16
+const ASPECT_RATIO = 16 / 9;
 const BOUDOIR_OVERLAY_KEY = "muse_boudoir_overlay_dismissed";
 
 export default function ImageTab({
@@ -47,8 +47,8 @@ export default function ImageTab({
 }: Props) {
   const [estimate, setEstimate] = useState("");
   const [lockAspect, setLockAspect] = useState(true);
+  const [formatExpanded, setFormatExpanded] = useState(false);
   const [boudoirOverlayVisible, setBoudoirOverlayVisible] = useState(false);
-  // 检查是否点了"不再提示"
   const [boudoirDontShow, setBoudoirDontShow] = useState(() => {
     try {
       return localStorage.getItem(BOUDOIR_OVERLAY_KEY) === "true";
@@ -89,21 +89,22 @@ export default function ImageTab({
   const handleSourceChange = useCallback((source: ImageSource) => {
     const updates: Partial<ImageConfig> = { imageSource: source };
     if (source === "network") {
-      updates.prefix = "网络图片";
-      updates.crop = false; // 默认不指定分辨率
+      updates.prefix = "云端图片";
+      updates.crop = false;
     } else if (source === "anime") {
       updates.prefix = "二次元";
     } else if (source === "boudoir") {
       updates.prefix = "NSFW";
-      updates.crop = false; // 默认不指定分辨率
+      updates.crop = false;
       if (!boudoirDontShow) {
         setBoudoirOverlayVisible(true);
       }
     } else {
       updates.prefix = "测试图片";
     }
+    setFormatExpanded(false);
     onConfigChange(updates);
-  }, [onConfigChange]);
+  }, [onConfigChange, boudoirDontShow]);
 
   const dismissBoudoirOverlay = useCallback(() => {
     setBoudoirOverlayVisible(false);
@@ -127,21 +128,60 @@ export default function ImageTab({
 
   const imageSource = config.imageSource ?? "generated";
   const isRemote = imageSource !== "generated";
+  const isCloudOrOther = imageSource === "network" || imageSource === "boudoir";
+  const showRes = isCloudOrOther ? (config.crop ?? false) : true;
 
   return (
     <div className="tab-panel">
-      <div className="form-row">
-        <label>格式</label>
-        <select
-          value={config.format}
-          onChange={(e) => onConfigChange({ format: e.target.value as ImageFormat })}
-          disabled={disabled || generating}
-        >
-          {FORMAT_OPTIONS.map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
-      </div>
+      {!isCloudOrOther ? (
+        <div className="form-row">
+          <label>格式</label>
+          <select
+            value={config.format}
+            onChange={(e) => onConfigChange({ format: e.target.value as ImageFormat })}
+            disabled={disabled || generating}
+          >
+            {FORMAT_OPTIONS.map((f) => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <>
+          {!formatExpanded ? (
+            <div className="form-row">
+              <label></label>
+              <span
+                className="expand-link"
+                onClick={() => setFormatExpanded(true)}
+              >
+                指定格式
+              </span>
+              <span className="hint-text">保持原始格式</span>
+            </div>
+          ) : (
+            <div className="form-row">
+              <label>
+                <span
+                  className="expand-link collapse"
+                  onClick={() => setFormatExpanded(false)}
+                >
+                  收起
+                </span>
+              </label>
+              <select
+                value={config.format}
+                onChange={(e) => onConfigChange({ format: e.target.value as ImageFormat })}
+                disabled={disabled || generating}
+              >
+                {FORMAT_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
       <div className="form-row">
         <label>图片来源</label>
         <select
@@ -154,9 +194,19 @@ export default function ImageTab({
           ))}
         </select>
       </div>
-      {!((imageSource === "boudoir" || imageSource === "network") && !config.crop) && (
+      {showRes && (
         <div className="form-row">
-          <label>分辨率</label>
+          <label>
+            {isCloudOrOther && (
+              <span
+                className="expand-link collapse"
+                onClick={() => onConfigChange({ crop: false })}
+              >
+                收起
+              </span>
+            )}
+            分辨率
+          </label>
           <div className="resolution-row">
             <input
               type="number"
@@ -199,19 +249,34 @@ export default function ImageTab({
           </select>
         </div>
       )}
-      {imageSource === "boudoir" || imageSource === "network" ? (
-        <div className="form-row">
-          <label>指定分辨率</label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={config.crop ?? false}
-              onChange={(e) => onConfigChange({ crop: e.target.checked })}
-              disabled={disabled || generating}
-            />
-            {config.crop ? "将裁剪/缩放图片" : "保持原始分辨率"}
-          </label>
-        </div>
+      {isCloudOrOther ? (
+        <>
+          {!showRes ? (
+            <div className="form-row">
+              <label></label>
+              <span
+                className="expand-link"
+                onClick={() => onConfigChange({ crop: true })}
+              >
+                指定分辨率
+              </span>
+              <span className="hint-text">保持原始分辨率</span>
+            </div>
+          ) : (
+            <div className="form-row">
+              <label></label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={config.crop ?? false}
+                  onChange={(e) => onConfigChange({ crop: e.target.checked })}
+                  disabled={disabled || generating}
+                />
+                {config.crop ? "裁剪到精确尺寸" : "保持原始比例"}
+              </label>
+            </div>
+          )}
+        </>
       ) : isRemote && (
         <div className="form-row">
           <label>裁剪填充</label>
