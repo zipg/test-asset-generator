@@ -15,7 +15,9 @@ use crate::process_ext::command;
 use config::AppConfig;
 use generator::{get_cancel, reset_cancel, set_cancel, random_hex};
 use rand::Rng;
+use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 use tauri::Emitter;
 /// Compute MD5 hash of a file
 fn file_md5(path: &std::path::Path) -> Result<String, String> {
@@ -221,6 +223,46 @@ async fn fetch_network_image_bytes(width: u32, height: u32, crop: bool) -> Resul
         }
     }
     Err(format!("所有网络图源均已耗尽: {}", last_err))
+}
+
+// Boudoir API 速率限制: 300s / 100次 / 超限封30分钟
+static BOUDOIR_TIMESTAMPS: Mutex<Option<Vec<Instant>>> = Mutex::new(None);
+
+async fn fetch_boudoir_image() -> Result<Vec<u8>, String> {
+    // 滑动窗口速率检查
+    {
+        let mut guard = BOUDOIR_TIMESTAMPS.lock().unwrap();
+        let timestamps = guard.get_or_insert_with(Vec::new);
+        let cutoff = Instant::now() - Duration::from_secs(300);
+        timestamps.retain(|t| *t > cutoff);
+        if timestamps.len() >= 100 {
+            return Err("本工具速率限制: 300秒内已达100次上限, 请稍后再试 (API限制 300s/100次/封30分钟)".to_string());
+        }
+        timestamps.push(Instant::now());
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300))
+        .connect_timeout(Duration::from_secs(45))
+        .build()
+        .map_err(|e| format!("HTTP client: {}", e))?;
+
+    let response = client
+        .get("https://boudoir.ortlinde.com/random")
+        .send()
+        .await
+        .map_err(|e| format!("网络请求失败: {}", e))?;
+
+    match response.status().as_u16() {
+        200 => response
+            .bytes()
+            .await
+            .map(|b| b.to_vec())
+            .map_err(|e| format!("读取响应失败: {}", e)),
+        403 => Err("IP已被临时封禁 (403), 该API限制 300秒内100次请求后封禁30分钟, 请等待30分钟后重试".to_string()),
+        429 => Err("请求过于频繁 (429), 请稍后重试 (API限制 300s/100次/封30分钟)".to_string()),
+        other => Err(format!("服务器返回错误 HTTP {}", other)),
+    }
 }
 
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
@@ -529,7 +571,7 @@ async fn generate_images(
             let gen_result = match config.image_source.as_str() {
                 "network" | "boudoir" => {
                     let raw_bytes: Vec<u8> = if config.image_source == "boudoir" {
-                        fetch_url_bytes("https://boudoir.ortlinde.com/random").await?
+                        fetch_boudoir_image().await?
                     } else {
                         fetch_network_image_bytes(config.width, config.height, config.crop).await?
                     };

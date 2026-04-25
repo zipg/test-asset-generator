@@ -23,7 +23,7 @@ const FORMAT_OPTIONS: ImageFormat[] = [
 const SOURCE_OPTIONS: { value: ImageSource; label: string }[] = [
   { value: "generated", label: "程序生成" },
   { value: "network", label: "网络获取" },
-  { value: "boudoir", label: "🔞网络获取(18+)" },
+  { value: "boudoir", label: "其它" },
 ];
 const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "noise", label: "随机噪声" },
