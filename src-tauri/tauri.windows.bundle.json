@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "resources": ["resources/ffmpeg.exe"]
+    "resources": ["resources/ffmpeg.exe", "resources/default.sf3"]
   }
 }
