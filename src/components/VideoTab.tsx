@@ -39,13 +39,11 @@ const FPS_OPTIONS = [30, 60];
 const CONTENT_OPTIONS: { value: VideoContentType; label: string }[] = [
   { value: "gradient", label: "随机渐变" },
   { value: "pattern", label: "彩条图案" },
-  { value: "noise", label: "元胞噪声" },
-  { value: "plasma", label: "等离子动态" },
-  { value: "waves", label: "波纹律动" },
-  { value: "kaleidoscope", label: "万花筒" },
-  { value: "fractal", label: "分形动画" },
-  { value: "life", label: "生命游戏" },
-  { value: "audioviz", label: "音频可视化" },
+  { value: "noise", label: "元胞噪声 (生成慢)" },
+  { value: "plasma", label: "等离子动态 (生成慢)" },
+  { value: "waves", label: "波纹律动 (生成慢)" },
+  { value: "kaleidoscope", label: "万花筒 (生成慢)" },
+  { value: "audioviz", label: "音频可视化 (生成慢)" },
 ];
 
 const ASPECT_RATIO = 16 / 9; // height / width for 9:16

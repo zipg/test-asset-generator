@@ -27,8 +27,6 @@ export type VideoContentType =
   | "plasma"
   | "waves"
   | "kaleidoscope"
-  | "fractal"
-  | "life"
   | "audioviz";
 /** 音频内容：随机噪音 / 简单节奏 / 随机音符 / 随机音乐（古典动机循环） */
 export type AudioContentType =

@@ -93,6 +93,7 @@ export default function ImageTab({
       updates.crop = false;
     } else if (source === "anime") {
       updates.prefix = "二次元";
+      updates.crop = false;
     } else if (source === "boudoir") {
       updates.prefix = "NSFW";
       updates.crop = false;
@@ -128,8 +129,7 @@ export default function ImageTab({
 
   const imageSource = config.imageSource ?? "generated";
   const isRemote = imageSource !== "generated";
-  const isCloudOrOther = imageSource === "network" || imageSource === "boudoir";
-  const showRes = isCloudOrOther ? (config.crop ?? false) : true;
+  const isCloudOrOther = imageSource === "network" || imageSource === "boudoir" || imageSource === "anime";
 
   return (
     <div className="tab-panel">
@@ -194,19 +194,60 @@ export default function ImageTab({
           )}
         </>
       )}
-      {showRes && (
-        <div className="form-row">
-          <label>
-            {isCloudOrOther && (
+      {isCloudOrOther ? (
+        config.crop ? (
+          <div className="form-row">
+            <label>
               <span
                 className="expand-link collapse"
                 onClick={() => onConfigChange({ crop: false })}
               >
                 收起
               </span>
-            )}
-            分辨率
-          </label>
+              分辨率
+            </label>
+            <div className="resolution-row">
+              <input
+                type="number"
+                value={config.width}
+                min={1}
+                onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
+                disabled={disabled || generating}
+              />
+              <span>x</span>
+              <input
+                type="number"
+                value={config.height}
+                min={1}
+                onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
+                disabled={disabled || generating}
+              />
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={lockAspect}
+                  onChange={(e) => setLockAspect(e.target.checked)}
+                  disabled={disabled || generating}
+                />
+                锁定9:16
+              </label>
+            </div>
+          </div>
+        ) : (
+          <div className="form-row">
+            <label></label>
+            <span
+              className="expand-link"
+              onClick={() => onConfigChange({ crop: true })}
+            >
+              指定分辨率
+            </span>
+            <span className="hint-text">保持原始分辨率</span>
+          </div>
+        )
+      ) : (
+        <div className="form-row">
+          <label>分辨率</label>
           <div className="resolution-row">
             <input
               type="number"
@@ -247,48 +288,6 @@ export default function ImageTab({
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
-        </div>
-      )}
-      {isCloudOrOther ? (
-        <>
-          {!showRes ? (
-            <div className="form-row">
-              <label></label>
-              <span
-                className="expand-link"
-                onClick={() => onConfigChange({ crop: true })}
-              >
-                指定分辨率
-              </span>
-              <span className="hint-text">保持原始分辨率</span>
-            </div>
-          ) : (
-            <div className="form-row">
-              <label></label>
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={config.crop ?? false}
-                  onChange={(e) => onConfigChange({ crop: e.target.checked })}
-                  disabled={disabled || generating}
-                />
-                {config.crop ? "裁剪到精确尺寸" : "保持原始比例"}
-              </label>
-            </div>
-          )}
-        </>
-      ) : isRemote && (
-        <div className="form-row">
-          <label>裁剪填充</label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={config.crop ?? true}
-              onChange={(e) => onConfigChange({ crop: e.target.checked })}
-              disabled={disabled || generating}
-            />
-            {config.crop ? "裁剪到精确尺寸" : "保持原始比例"}
-          </label>
         </div>
       )}
       <div className="form-row">

@@ -554,7 +554,7 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
             let image_source = cfg["imageSource"].as_str().unwrap_or("generated");
             if image_source == "network" || image_source == "anime" || image_source == "boudoir" {
                 let count = cfg["count"].as_u64().unwrap_or(1);
-                let size = count as f64 * 0.2; // ~200 KB per JPEG from network
+                let size = count as f64 * 1.0; // ~1 MB per image from network
                 return format!("~{:.1} MB (远程)", size.max(0.01));
             }
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
@@ -609,8 +609,7 @@ async fn generate_images(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
-
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
     let total = config.count;
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -657,7 +656,7 @@ async fn generate_images(
                     };
 
                     // 网络获取和其它默认不指定分辨率, 直接保存原始图片
-                    if (config.image_source == "boudoir" || config.image_source == "network") && !config.crop {
+                    if (config.image_source == "boudoir" || config.image_source == "network" || config.image_source == "anime") && !config.crop {
                         std::fs::write(&output_path, &raw_bytes)
                             .map_err(|e| format!("写入文件失败: {}", e))?;
                         Ok("saved".to_string())
@@ -787,7 +786,7 @@ async fn generate_audio(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -945,7 +944,7 @@ async fn generate_videos(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix, Some(content_type_label(&config.content_type)))?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -963,6 +962,7 @@ async fn generate_videos(
         _ => "mp4",
     };
     let duration_str = format_duration(config.duration);
+    let ct_label = content_type_label(&config.content_type);
 
     let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
 
@@ -982,7 +982,7 @@ async fn generate_videos(
             }
 
             let random_str = random_hex(6);
-            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
+            let filename = format!("{}_{}_{:03}_{}.{}", config.prefix, ct_label, i, random_str, ext);
             let output_path = output_dir.join(&filename);
 
             let seed: u32 = unique_seed();
@@ -1028,20 +1028,6 @@ async fn generate_videos(
                     w, h, f, duration_str,
                     s = speed * 2.0,
                 ),
-                "fractal" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='clip(abs(sin((X/W+cos(T*{s}*0.3))*PI*8+T*{s}))*340,0,255)':g='clip(abs(cos((Y/H+sin(T*{s}*0.4))*PI*8+T*{s}*0.7))*340,0,255)':b='clip(abs(sin(((X-Y)/max(W,H))*PI*12+T*{s}*1.2))*340,0,255)'",
-                    w, h, f, duration_str,
-                    s = speed * 2.0,
-                ),
-                "life" => {
-                    let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
-                    let rule = rules[(seed % rules.len() as u32) as usize];
-                    let fill_ratio = 0.3 + (seed % 50) as f64 / 100.0;
-                    format!(
-                        "cellauto=rule={}:size={}x{}:random_seed={}:random_fill_ratio={},scale={}:{}:flags=neighbor",
-                        rule, w, h, seed, fill_ratio, w, h
-                    )
-                },
                 "audioviz" => format!(
                     "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5))+0.03),40,0)'",
                     w, h, f, duration_str,
@@ -1094,7 +1080,7 @@ async fn generate_videos(
                         config.duration,
                         &sf_path,
                         &temp_wav,
-                        44100,
+                        22050,
                         inst,
                         true,
                         true,
@@ -1312,10 +1298,28 @@ async fn generate_videos(
     }))
 }
 
-fn create_timestamp_dir(base: &str, prefix: &str) -> Result<std::path::PathBuf, String> {
+fn content_type_label(ct: &str) -> &str {
+    match ct {
+        "solid" => "纯色",
+        "gradient" => "渐变",
+        "pattern" => "彩条图案",
+        "noise" => "元胞噪声",
+        "plasma" => "等离子动态",
+        "waves" => "波纹律动",
+        "kaleidoscope" => "万花筒",
+        "audioviz" => "音频可视化",
+        _ => ct,
+    }
+}
+
+fn create_timestamp_dir(base: &str, prefix: &str, content_type: Option<&str>) -> Result<std::path::PathBuf, String> {
     // 使用系统本地时区（国内 Mac 一般为北京时间）；格式为 MMDD_HHmmss
     let stamp = chrono::Local::now().format("%m%d_%H%M%S").to_string();
-    let dir_name = format!("{}_{}", prefix, stamp);
+    let dir_name = if let Some(ct) = content_type {
+        format!("{}_{}_{}", prefix, ct, stamp)
+    } else {
+        format!("{}_{}", prefix, stamp)
+    };
     let dir = std::path::PathBuf::from(base).join(&dir_name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;
     Ok(dir)
@@ -1374,7 +1378,7 @@ async fn generate_music(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix)?;
+    let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
 
     let total = config.count;
     let mut success = 0u32;
