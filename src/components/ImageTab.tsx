@@ -90,6 +90,7 @@ export default function ImageTab({
     const updates: Partial<ImageConfig> = { imageSource: source };
     if (source === "network") {
       updates.prefix = "网络图片";
+      updates.crop = false; // 默认不指定分辨率
     } else if (source === "anime") {
       updates.prefix = "二次元";
     } else if (source === "boudoir") {
@@ -153,7 +154,7 @@ export default function ImageTab({
           ))}
         </select>
       </div>
-      {!(imageSource === "boudoir" && !config.crop) && (
+      {!((imageSource === "boudoir" || imageSource === "network") && !config.crop) && (
         <div className="form-row">
           <label>分辨率</label>
           <div className="resolution-row">
@@ -198,7 +199,7 @@ export default function ImageTab({
           </select>
         </div>
       )}
-      {imageSource === "boudoir" ? (
+      {imageSource === "boudoir" || imageSource === "network" ? (
         <div className="form-row">
           <label>指定分辨率</label>
           <label className="checkbox-label">
@@ -260,7 +261,7 @@ export default function ImageTab({
           <div className="boudoir-overlay-card">
             <p className="boudoir-overlay-text">
               ⚠️ 内容警告<br /><br />
-              此功能可能获取到违规内容素材，<br />
+              此功能可能生成违规内容素材，<br />
               仅用于图片审核机制测试，<br />
               严禁传播获取的内容。
             </p>

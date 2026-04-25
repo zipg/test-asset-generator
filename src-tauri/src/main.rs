@@ -656,8 +656,8 @@ async fn generate_images(
                         fetch_network_image_bytes(config.width, config.height, config.crop).await?
                     };
 
-                    // boudoir 默认不指定分辨率, 直接保存原始图片
-                    if config.image_source == "boudoir" && !config.crop {
+                    // 网络获取和其它默认不指定分辨率, 直接保存原始图片
+                    if (config.image_source == "boudoir" || config.image_source == "network") && !config.crop {
                         std::fs::write(&output_path, &raw_bytes)
                             .map_err(|e| format!("写入文件失败: {}", e))?;
                         Ok("saved".to_string())
