@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import type {
   MusicConfig,
   AudioFormat,
-  MelodyTemplate,
 } from "../types";
+
+const MUSIC_OVERLAY_KEY = "muse_music_overlay_dismissed";
 
 interface Props {
   config: MusicConfig;
@@ -17,18 +18,6 @@ interface Props {
 }
 
 const FORMAT_OPTIONS: AudioFormat[] = ["MP3", "WAV", "AAC"];
-const MELODY_OPTIONS: { value: MelodyTemplate; label: string }[] = [
-  { value: "scale", label: "音阶练习" },
-  { value: "arpeggio", label: "琶音" },
-  { value: "folk", label: "民谣旋律" },
-  { value: "twinkle", label: "小星星" },
-  { value: "ode_to_joy", label: "欢乐颂" },
-  { value: "canon", label: "卡农" },
-  { value: "castle_sky", label: "天空之城" },
-  { value: "jasmine", label: "茉莉花" },
-  { value: "birthday", label: "生日快乐" },
-  { value: "random", label: "随机旋律" },
-];
 
 export default function MusicTab({
   config,
@@ -41,6 +30,22 @@ export default function MusicTab({
   disabled = false,
 }: Props) {
   const [estimate, setEstimate] = useState("");
+  const [overlayVisible, setOverlayVisible] = useState(() => {
+    try {
+      return localStorage.getItem(MUSIC_OVERLAY_KEY) !== "true";
+    } catch {
+      return true;
+    }
+  });
+
+  const dismissOverlay = useCallback(() => {
+    setOverlayVisible(false);
+    try {
+      localStorage.setItem(MUSIC_OVERLAY_KEY, "true");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     onEstimate({
@@ -106,18 +111,6 @@ export default function MusicTab({
           disabled={disabled || generating}
         />
         <span className="gain-tag">{config.gainDb ?? 0} dB</span>
-      </div>
-      <div className="form-row">
-        <label>旋律模板</label>
-        <select
-          value={config.melody}
-          onChange={(e) => onConfigChange({ melody: e.target.value as MelodyTemplate })}
-          disabled={disabled || generating}
-        >
-          {MELODY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
       </div>
       <div className="form-row">
         <label>文件数量</label>
@@ -223,6 +216,20 @@ export default function MusicTab({
       >
         {generating ? "生成中..." : "开始生成"}
       </button>
+
+      {overlayVisible && (
+        <div className="music-overlay">
+          <div className="music-overlay-card">
+            <p className="music-overlay-text">
+              生成的音乐可能不好听，甚至可能很阴间，<br />
+              但至少也是音乐，用于测试就好，不要要求太高！
+            </p>
+            <button className="music-overlay-btn" onClick={dismissOverlay}>
+              行吧
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

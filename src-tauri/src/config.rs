@@ -45,7 +45,10 @@ pub struct VideoConfig {
     /// 画面动态强度 1-10
     #[serde(default = "default_video_dynamics")]
     pub dynamics: u32,
-    /// 与音频 tab 一致：noise | rhythm | notes | random_music
+    /// 音频引擎: "none" | "simple" | "fluidsynth"
+    #[serde(default = "default_audio_engine")]
+    pub audio_engine: String,
+    /// @deprecated 保留旧字段以兼容
     #[serde(default = "default_audio_content")]
     pub audio_content: String,
 }
@@ -86,6 +89,10 @@ pub struct AppConfig {
     pub video_config: VideoConfig,
     #[serde(default = "default_music_config")]
     pub music_config: MusicConfig,
+}
+
+fn default_audio_engine() -> String {
+    "fluidsynth".to_string()
 }
 
 fn default_audio_content() -> String {
@@ -167,6 +174,7 @@ impl Default for AppConfig {
                 prefix: "测试视频".to_string(),
                 add_audio_track: true,
                 audio_content: "random_music".to_string(),
+                audio_engine: "fluidsynth".to_string(),
                 dynamics: 5,
             },
             music_config: default_music_config(),

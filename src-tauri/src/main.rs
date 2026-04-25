@@ -830,8 +830,44 @@ async fn generate_videos(
 
             let mut args: Vec<String> = vec!["-y".to_string()];
 
-            if config.add_audio_track {
-                if config.audio_content == "random_music" {
+            let add_audio = config.add_audio_track && config.audio_engine != "none";
+            if add_audio {
+                if config.audio_engine == "fluidsynth" {
+                    // 真实乐器: 生成临时 WAV，再与视频合并
+                    let temp_wav = output_dir.join(format!("vida_{}.wav", random_hex(4)));
+                    let all_music = crate::music_library::get_all_music();
+                    let piece = &all_music[(seed as usize) % all_music.len()];
+                    let melody_notes = (piece.notes)();
+                    let sf_path = crate::fluidsynth_render::check_soundfont_exists(&app)
+                        .ok_or_else(|| "SoundFont 不可用".to_string())?;
+                    let inst = if config.audio_content == "random" {
+                        crate::fluidsynth_render::random_instrument().0
+                    } else {
+                        config.audio_content.parse::<u8>().unwrap_or(0)
+                    };
+                    crate::fluidsynth_render::render_with_fluidsynth(
+                        &melody_notes,
+                        120,
+                        config.duration,
+                        &sf_path,
+                        &temp_wav,
+                        44100,
+                        inst,
+                        true,
+                        true,
+                        0.0,
+                    )?;
+                    args.extend_from_slice(&[
+                        "-f".to_string(), "lavfi".to_string(),
+                        "-i".to_string(), filter.clone(),
+                        "-i".to_string(), temp_wav.to_str().unwrap().to_string(),
+                        "-map".to_string(), "0:v".to_string(),
+                        "-map".to_string(), "1:a".to_string(),
+                        "-shortest".to_string(),
+                        "-ac".to_string(), "2".to_string(),
+                    ]);
+                } else {
+                    // 简易合成: 使用正弦波混合
                     let sines = audio_music::sine_inputs(seed, 48_000);
                     args.extend_from_slice(&[
                         "-f".to_string(),
@@ -856,34 +892,8 @@ async fn generate_videos(
                         "0:v".to_string(),
                         "-map".to_string(),
                         "[mus]".to_string(),
+                        "-ac".to_string(), "2".to_string(),
                     ]);
-                    if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
-                        args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
-                    }
-                } else {
-                    let audio_lavfi = audio_lavfi::build_lavfi_audio_for_video(
-                        &config.audio_content,
-                        config.duration,
-                        seed,
-                    );
-                    args.extend_from_slice(&[
-                        "-f".to_string(),
-                        "lavfi".to_string(),
-                        "-i".to_string(),
-                        filter.clone(),
-                        "-f".to_string(),
-                        "lavfi".to_string(),
-                        "-i".to_string(),
-                        audio_lavfi,
-                        "-map".to_string(),
-                        "0:v".to_string(),
-                        "-map".to_string(),
-                        "1:a".to_string(),
-                        "-shortest".to_string(),
-                    ]);
-                    if audio_lavfi::needs_stereo_upmix_video(&config.audio_content) {
-                        args.extend_from_slice(&["-ac".to_string(), "2".to_string()]);
-                    }
                 }
                 match vcodec {
                     "libvpx-vp9" => {
@@ -932,7 +942,7 @@ async fn generate_videos(
                 if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
                     args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
                 }
-                if config.audio_content == "random_music" {
+                if config.audio_engine == "simple" {
                     args.extend_from_slice(&["-t".to_string(), duration_str.clone()]);
                 }
             } else {
@@ -988,7 +998,7 @@ async fn generate_videos(
                 } else {
                     45.0
                 };
-                let extra = if config.add_audio_track && config.audio_content == "random_music" {
+                let extra = if config.add_audio_track && config.audio_engine != "none" {
                     90.0
                 } else {
                     0.0

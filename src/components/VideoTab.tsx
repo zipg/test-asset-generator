@@ -4,7 +4,6 @@ import type {
   VideoFormat,
   Codec,
   VideoContentType,
-  AudioContentType,
 } from "../types";
 
 interface Props {
@@ -14,6 +13,7 @@ interface Props {
   onGenerate: () => void;
   onEstimate: (cfg: Record<string, unknown>) => Promise<string>;
   generating: boolean;
+  soundfontReady: boolean;
   disabled?: boolean;
 }
 
@@ -26,13 +26,10 @@ const FORMAT_OPTIONS: VideoFormat[] = [
   "MKV",
   "3GP",
 ];
-/** 无 = 不混音；其余与音频 Tab 三种内容一致 */
-const EMBEDDED_AUDIO_OPTIONS: { value: "none" | AudioContentType; label: string }[] = [
+const AUDIO_ENGINE_OPTIONS: { value: string; label: string }[] = [
   { value: "none", label: "无" },
-  { value: "noise", label: "随机噪音" },
-  { value: "rhythm", label: "简单节奏" },
-  { value: "notes", label: "随机音符" },
-  { value: "random_music", label: "随机音乐" },
+  { value: "simple", label: "简易合成 (速度快)" },
+  { value: "fluidsynth", label: "真实乐器 (FluidSynth, 较慢)" },
 ];
 const CODEC_OPTIONS: { value: Codec; label: string }[] = [
   { value: "h264", label: "H.264" },
@@ -63,6 +60,7 @@ export default function VideoTab({
   onGenerate,
   onEstimate,
   generating,
+  soundfontReady,
   disabled = false,
 }: Props) {
   const [estimate, setEstimate] = useState("");
@@ -226,24 +224,27 @@ export default function VideoTab({
       <div className="form-row">
         <label>增加音频</label>
         <select
-          value={config.addAudioTrack ? config.audioContent : "none"}
+          value={config.audioEngine ?? (config.addAudioTrack ? "fluidsynth" : "none")}
           onChange={(e) => {
             const v = e.target.value;
-            if (v === "none") {
-              onConfigChange({ addAudioTrack: false });
-            } else {
-              onConfigChange({
-                addAudioTrack: true,
-                audioContent: v as AudioContentType,
-              });
-            }
+            onConfigChange({
+              audioEngine: v as VideoConfig["audioEngine"],
+              addAudioTrack: v !== "none",
+            });
           }}
           disabled={disabled || generating}
         >
-          {EMBEDDED_AUDIO_OPTIONS.map((opt) => (
+          {AUDIO_ENGINE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
+        {(config.audioEngine ?? "fluidsynth") === "fluidsynth" && (
+          config.addAudioTrack !== false
+            ? (soundfontReady
+              ? <span className="status-ok">✓ 音色库已就绪</span>
+              : <span className="status-warn">⚠ 音色库未内置</span>)
+            : null
+        )}
       </div>
       <div className="form-row">
         <label>文件数量</label>

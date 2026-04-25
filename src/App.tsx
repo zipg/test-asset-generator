@@ -224,6 +224,7 @@ export default function App() {
             onGenerate={handleGenerateVideos}
             onEstimate={(c) => estimateSize("video", c)}
             generating={generating}
+            soundfontReady={soundfontReady}
             disabled={!ffmpegReady || downloading}
           />
         )}

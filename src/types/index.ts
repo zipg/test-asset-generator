@@ -69,7 +69,9 @@ export interface VideoConfig {
   count: number;
   prefix: string;
   addAudioTrack: boolean;
-  audioContent: AudioContentType;
+  /** @deprecated 替换为 audioEngine */
+  audioContent?: AudioContentType;
+  audioEngine: "none" | "simple" | "fluidsynth";
   /** 画面动态强度 1-10 */
   dynamics: number;
 }
