@@ -34,7 +34,7 @@ const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
 ];
 
 const ASPECT_RATIO = 16 / 9;
-const BOUDOIR_OVERLAY_KEY = "muse_boudoir_overlay_dismissed";
+const BOUDOIR_OVERLAY_KEY = "muse_boudoir_dontshow_v2";
 
 export default function ImageTab({
   config,
@@ -133,6 +133,18 @@ export default function ImageTab({
 
   return (
     <div className="tab-panel">
+      <div className="form-row">
+        <label>图片来源</label>
+        <select
+          value={imageSource}
+          onChange={(e) => handleSourceChange(e.target.value as ImageSource)}
+          disabled={disabled || generating}
+        >
+          {SOURCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
       {!isCloudOrOther ? (
         <div className="form-row">
           <label>格式</label>
@@ -182,18 +194,6 @@ export default function ImageTab({
           )}
         </>
       )}
-      <div className="form-row">
-        <label>图片来源</label>
-        <select
-          value={imageSource}
-          onChange={(e) => handleSourceChange(e.target.value as ImageSource)}
-          disabled={disabled || generating}
-        >
-          {SOURCE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
-        </select>
-      </div>
       {showRes && (
         <div className="form-row">
           <label>

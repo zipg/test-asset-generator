@@ -249,6 +249,8 @@ pub fn save_config(app_handle: &tauri::AppHandle, config: &AppConfig) {
             }
         }
     }
+    // 图片来源不持久化, 每次启动默认程序生成
+    out.image_config.image_source = "generated".to_string();
     let contents = serde_json::to_string_pretty(&out).expect("Failed to serialize config");
     fs::write(&path, contents).expect("Failed to write config");
 }
