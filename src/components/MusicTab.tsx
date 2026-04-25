@@ -190,7 +190,7 @@ export default function MusicTab({
               <option value="80">Ocarina (陶笛)</option>
             </select>
           </div>
-          <div className="form-row">
+          <div className="form-row checkbox-row">
             <label>
               <input
                 type="checkbox"
@@ -198,10 +198,8 @@ export default function MusicTab({
                 onChange={(e) => onConfigChange({ enableHarmony: e.target.checked })}
                 disabled={disabled || generating}
               />
-              {" "}多乐器和声
+              多乐器和声
             </label>
-          </div>
-          <div className="form-row">
             <label>
               <input
                 type="checkbox"
@@ -209,7 +207,7 @@ export default function MusicTab({
                 onChange={(e) => onConfigChange({ enableDrums: e.target.checked })}
                 disabled={disabled || generating}
               />
-              {" "}添加鼓点伴奏
+              鼓点伴奏
             </label>
           </div>
         </>

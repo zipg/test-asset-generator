@@ -171,6 +171,15 @@ pub fn render_with_fluidsynth(
     // 生成单次遍历的 MIDI 事件
     let mut one_pass_events: Vec<(f32, MidiEvent)> = Vec::new();
 
+    // ====== MIDI CC 空间与效果设置 (time 0.0) ======
+
+    // Channel 0 — 主旋律: 偏左, 清晰, 适度混响+合唱
+    one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 0, ctrl: 7, value: 110 }));   // Volume
+    one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 0, ctrl: 10, value: 40 }));   // Pan: 偏左
+    one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 0, ctrl: 91, value: 55 }));   // Reverb
+    one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 0, ctrl: 93, value: 28 }));   // Chorus
+    one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: 22 }));    // Mod: 基础颤音
+
     // Program Change — Channel 0 主旋律
     one_pass_events.push((0.0, MidiEvent::ProgramChange {
         channel: 0,
@@ -184,6 +193,11 @@ pub fn render_with_fluidsynth(
             channel: 1,
             program_id: harmony_instrument,
         }));
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 7, value: 78 }));    // Volume: 较弱
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 10, value: 95 }));   // Pan: 偏右
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 91, value: 68 }));   // Reverb: 更深
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 93, value: 18 }));   // Chorus: 轻
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 1, ctrl: 1, value: 30 }));    // Mod: 稍多颤音
     }
 
     // 主旋律 (Channel 0) + 和声 (Channel 1)
@@ -194,8 +208,15 @@ pub fn render_with_fluidsynth(
         let vel = 65 + rng.gen_range(0..20);
 
         // 主旋律
+        // 长音符加颤音
+        if *dur >= 1.0 {
+            one_pass_events.push((t - 0.005, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: 50 }));
+        }
         one_pass_events.push((t, MidiEvent::NoteOn { channel: 0, key: midi, vel }));
         one_pass_events.push((t + secs * 0.92, MidiEvent::NoteOff { channel: 0, key: midi }));
+        if *dur >= 1.0 {
+            one_pass_events.push((t + secs * 0.92 + 0.005, MidiEvent::ControlChange { channel: 0, ctrl: 1, value: 22 }));
+        }
 
         if enable_harmony {
             // 三度和声 (Channel 1): 旋律上方 4 个半音（大三度）
@@ -218,6 +239,9 @@ pub fn render_with_fluidsynth(
 
     // 鼓点 (Channel 9)
     if enable_drums {
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 9, ctrl: 7, value: 105 }));   // Volume
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 9, ctrl: 10, value: 64 }));   // Pan: 居中
+        one_pass_events.push((0.0, MidiEvent::ControlChange { channel: 9, ctrl: 91, value: 18 }));   // Reverb: 少量
         let bars = ((one_pass_time / (4.0 * beat_duration)).ceil() as u32).max(1);
         for (time, note, vel) in generate_drum_pattern(bpm, bars) {
             one_pass_events.push((time, MidiEvent::NoteOn { channel: 9, key: note, vel }));

@@ -264,6 +264,20 @@ body {
 .status-ok { color: #34c759; }
 .status-warn { color: #ff9500; }
 
+/* Checkbox inline row */
+.checkbox-row {
+  gap: 20px;
+}
+.checkbox-row label {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 /* Resolution Row */
 .resolution-row {
   flex: 1;
