@@ -190,3 +190,68 @@ pub fn transpose(notes: &[(f32, f32)], semitones: i32) -> Vec<Note> {
     let ratio = 2_f32.powf(semitones as f32 / 12.0);
     notes.iter().map(|&(freq, dur)| (freq * ratio, dur)).collect()
 }
+
+/// 将简短主题扩展为完整 A-B-A 结构的完整乐谱
+/// Theme A ×2 → Bridge → Theme B ×2 (移调变奏) → Theme A' ×2 (再现) → Coda
+/// 一个 30 音符的主题可扩展为约 250 音符的完整作品
+pub fn expand_to_aba(theme: &[Note]) -> Vec<Note> {
+    use rand::Rng;
+    if theme.is_empty() {
+        return theme.to_vec();
+    }
+    let mut full: Vec<Note> = Vec::new();
+
+    // Intro — 从主题开头放慢引申
+    for &(f, d) in theme.iter().take(4) {
+        full.push((f, d * 1.5));
+    }
+
+    // Theme A — 原主题重复 2 次
+    for _ in 0..2 {
+        full.extend_from_slice(theme);
+    }
+
+    // Bridge — 过渡段（主题结尾反转 + 压缩）
+    for &(f, d) in theme.iter().rev().take(6) {
+        full.push((f * 1.334, d * 0.75));
+    }
+
+    // Theme B — 变奏（移调 + 节奏随机化）
+    let mut rng = rand::thread_rng();
+    let b_section: Vec<Note> = theme.iter()
+        .map(|&(f, d)| {
+            let swing: f32 = rng.gen_range(0.75..1.25);
+            (f * 1.498, d * swing)
+        })
+        .collect();
+    for _ in 0..2 {
+        full.extend(b_section.clone());
+    }
+
+    // Theme A' — 再现主题（带装饰）
+    let a2: Vec<Note> = theme.iter()
+        .enumerate()
+        .flat_map(|(i, &(f, d))| {
+            let mut n = vec![(f, d)];
+            // 每隔几个音加一个经过音
+            if i % 3 == 1 {
+                n.push((f * 1.122, d * 0.25));
+            }
+            n
+        })
+        .collect();
+    for _ in 0..2 {
+        full.extend(a2.clone());
+    }
+
+    // Coda — 尾声（拉长收束）
+    for &(f, d) in theme.iter().rev().take(4).collect::<Vec<_>>().iter().rev() {
+        full.push((*f, *d * 2.0));
+    }
+    // 终止音
+    if let Some(&(last, _)) = theme.last() {
+        full.push((last, 3.0));
+    }
+
+    full
+}
