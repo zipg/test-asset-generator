@@ -92,6 +92,7 @@ export default function ImageTab({
       updates.prefix = "二次元";
     } else if (source === "boudoir") {
       updates.prefix = "NSFW";
+      updates.crop = false; // 默认不指定分辨率
       try {
         if (localStorage.getItem(BOUDOIR_OVERLAY_KEY) !== "true") {
           setBoudoirOverlayVisible(true);
@@ -147,35 +148,37 @@ export default function ImageTab({
           ))}
         </select>
       </div>
-      <div className="form-row">
-        <label>分辨率</label>
-        <div className="resolution-row">
-          <input
-            type="number"
-            value={config.width}
-            min={1}
-            onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
-            disabled={disabled || generating}
-          />
-          <span>x</span>
-          <input
-            type="number"
-            value={config.height}
-            min={1}
-            onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
-            disabled={disabled || generating}
-          />
-          <label className="checkbox-label">
+      {!(imageSource === "boudoir" && !config.crop) && (
+        <div className="form-row">
+          <label>分辨率</label>
+          <div className="resolution-row">
             <input
-              type="checkbox"
-              checked={lockAspect}
-              onChange={(e) => setLockAspect(e.target.checked)}
+              type="number"
+              value={config.width}
+              min={1}
+              onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
               disabled={disabled || generating}
             />
-            锁定9:16
-          </label>
+            <span>x</span>
+            <input
+              type="number"
+              value={config.height}
+              min={1}
+              onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
+              disabled={disabled || generating}
+            />
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={lockAspect}
+                onChange={(e) => setLockAspect(e.target.checked)}
+                disabled={disabled || generating}
+              />
+              锁定9:16
+            </label>
+          </div>
         </div>
-      </div>
+      )}
       {!isRemote && (
         <div className="form-row">
           <label>内容类型</label>
@@ -190,7 +193,20 @@ export default function ImageTab({
           </select>
         </div>
       )}
-      {isRemote && (
+      {imageSource === "boudoir" ? (
+        <div className="form-row">
+          <label>指定分辨率</label>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={config.crop ?? false}
+              onChange={(e) => onConfigChange({ crop: e.target.checked })}
+              disabled={disabled || generating}
+            />
+            {config.crop ? "将裁剪/缩放图片" : "保持原始分辨率"}
+          </label>
+        </div>
+      ) : isRemote && (
         <div className="form-row">
           <label>裁剪填充</label>
           <label className="checkbox-label">

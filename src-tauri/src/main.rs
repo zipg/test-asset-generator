@@ -656,39 +656,46 @@ async fn generate_images(
                         fetch_network_image_bytes(config.width, config.height, config.crop).await?
                     };
 
-                    let tmp_path = output_dir.join(format!("_tmp_{:06}_{}.jpg", i, seed));
-                    std::fs::write(&tmp_path, &raw_bytes)
-                        .map_err(|e| format!("写入临时文件失败: {}", e))?;
-
-                    let vf = if config.crop {
-                        format!(
-                            "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}",
-                            config.width, config.height, config.width, config.height
-                        )
+                    // boudoir 默认不指定分辨率, 直接保存原始图片
+                    if config.image_source == "boudoir" && !config.crop {
+                        std::fs::write(&output_path, &raw_bytes)
+                            .map_err(|e| format!("写入文件失败: {}", e))?;
+                        Ok("saved".to_string())
                     } else {
-                        format!(
-                            "scale={}:{}:force_original_aspect_ratio=decrease",
-                            config.width, config.height
-                        )
-                    };
+                        let tmp_path = output_dir.join(format!("_tmp_{:06}_{}.jpg", i, seed));
+                        std::fs::write(&tmp_path, &raw_bytes)
+                            .map_err(|e| format!("写入临时文件失败: {}", e))?;
 
-                    let mut args: Vec<String> = vec![
-                        "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
-                        "-vf".to_string(), vf,
-                        "-vframes".to_string(), "1".to_string(),
-                        "-y".to_string(),
-                    ];
-                    match ext {
-                        "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
-                        "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
-                        "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
-                        _ => {}
+                        let vf = if config.crop {
+                            format!(
+                                "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}",
+                                config.width, config.height, config.width, config.height
+                            )
+                        } else {
+                            format!(
+                                "scale={}:{}:force_original_aspect_ratio=decrease",
+                                config.width, config.height
+                            )
+                        };
+
+                        let mut args: Vec<String> = vec![
+                            "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
+                            "-vf".to_string(), vf,
+                            "-vframes".to_string(), "1".to_string(),
+                            "-y".to_string(),
+                        ];
+                        match ext {
+                            "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+                            "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                            "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
+                            _ => {}
+                        }
+                        args.push(output_path.to_str().unwrap().to_string());
+
+                        let result = ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 60);
+                        let _ = std::fs::remove_file(&tmp_path);
+                        result
                     }
-                    args.push(output_path.to_str().unwrap().to_string());
-
-                    let result = ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 60);
-                    let _ = std::fs::remove_file(&tmp_path);
-                    result
                 }
                 _ => {
                     let filter = build_image_filter(&config.content_type, config.width, config.height, seed);
