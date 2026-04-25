@@ -47,11 +47,13 @@ export default function ImageTab({
 }: Props) {
   const [estimate, setEstimate] = useState("");
   const [lockAspect, setLockAspect] = useState(true);
-  const [boudoirOverlayVisible, setBoudoirOverlayVisible] = useState(() => {
+  const [boudoirOverlayVisible, setBoudoirOverlayVisible] = useState(false);
+  // 检查是否点了"不再提示"
+  const [boudoirDontShow, setBoudoirDontShow] = useState(() => {
     try {
-      return localStorage.getItem(BOUDOIR_OVERLAY_KEY) !== "true";
+      return localStorage.getItem(BOUDOIR_OVERLAY_KEY) === "true";
     } catch {
-      return true;
+      return false;
     }
   });
 
@@ -93,11 +95,9 @@ export default function ImageTab({
     } else if (source === "boudoir") {
       updates.prefix = "NSFW";
       updates.crop = false; // 默认不指定分辨率
-      try {
-        if (localStorage.getItem(BOUDOIR_OVERLAY_KEY) !== "true") {
-          setBoudoirOverlayVisible(true);
-        }
-      } catch {}
+      if (!boudoirDontShow) {
+        setBoudoirOverlayVisible(true);
+      }
     } else {
       updates.prefix = "测试图片";
     }
@@ -106,6 +106,11 @@ export default function ImageTab({
 
   const dismissBoudoirOverlay = useCallback(() => {
     setBoudoirOverlayVisible(false);
+  }, []);
+
+  const dismissBoudoirForever = useCallback(() => {
+    setBoudoirOverlayVisible(false);
+    setBoudoirDontShow(true);
     try {
       localStorage.setItem(BOUDOIR_OVERLAY_KEY, "true");
     } catch {}
@@ -254,14 +259,20 @@ export default function ImageTab({
         <div className="boudoir-overlay">
           <div className="boudoir-overlay-card">
             <p className="boudoir-overlay-text">
-              ⚠️ 成人内容警告<br /><br />
-              此功能将获取成人内容素材，<br />
-              未满18岁禁止使用。<br />
-              请勿传播获取的内容。
+              ⚠️ 内容警告<br /><br />
+              此功能可能获取到违规内容素材，<br />
+              仅用于图片审核机制测试，<br />
+              严禁传播获取的内容。
             </p>
             <button className="boudoir-overlay-btn" onClick={dismissBoudoirOverlay}>
               我已知晓，继续
             </button>
+            <div
+              className="boudoir-overlay-dontshow"
+              onClick={dismissBoudoirForever}
+            >
+              不再提示
+            </div>
           </div>
         </div>
       )}
