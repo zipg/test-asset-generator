@@ -988,11 +988,11 @@ async fn generate_videos(
             let seed: u32 = unique_seed();
 
             let speed = config.dynamics as f32 / 5.0;
-            let w = config.width;
-            let h = config.height;
+            let w = config.width.max(2);
+            let h = config.height.max(2);
             let f = config.fps;
-            let hw = w / 2;
-            let hh = h / 2;
+            let hw = (w / 2).max(2);
+            let hh = (h / 2).max(2);
             let filter = match config.content_type.as_str() {
                 "solid" => {
                     let color_hue = (seed % 360) as f32;

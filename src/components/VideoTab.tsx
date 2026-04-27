@@ -150,16 +150,16 @@ export default function VideoTab({
           <input
             type="number"
             value={config.width}
-            min={1}
-            onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
+            min={2}
+            onChange={(e) => handleWidthChange(parseInt(e.target.value) || 2)}
             disabled={disabled || generating}
           />
           <span>x</span>
           <input
             type="number"
             value={config.height}
-            min={1}
-            onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
+            min={2}
+            onChange={(e) => handleHeightChange(parseInt(e.target.value) || 2)}
             disabled={disabled || generating}
           />
           <label className="checkbox-label">
