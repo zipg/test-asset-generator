@@ -91,19 +91,14 @@ export default function ImageTab({
   const handleSourceChange = useCallback((source: ImageSource) => {
     const updates: Partial<ImageConfig> = { imageSource: source };
     if (source === "network") {
-      updates.prefix = "云端图片";
       updates.crop = false;
     } else if (source === "anime") {
-      updates.prefix = "二次元";
       updates.crop = false;
     } else if (source === "boudoir") {
-      updates.prefix = "NSFW";
       updates.crop = false;
       if (!boudoirDontShow) {
         setBoudoirOverlayVisible(true);
       }
-    } else {
-      updates.prefix = "测试图片";
     }
     setFormatExpanded(false);
     onConfigChange(updates);

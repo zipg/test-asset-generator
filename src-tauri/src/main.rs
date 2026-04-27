@@ -554,23 +554,25 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
             let image_source = cfg["imageSource"].as_str().unwrap_or("generated");
             if image_source == "network" || image_source == "anime" || image_source == "boudoir" {
                 let count = cfg["count"].as_u64().unwrap_or(1);
-                let size = count as f64 * 1.0; // ~1 MB per image from network
-                return format!("~{:.1} MB (远程)", size.max(0.01));
+                let size = count as f64 * 0.5;
+                let secs = count as f64 * 5.0;
+                return format_estimate_string(size.max(0.01), secs as u64);
             }
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
             let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
             let format = cfg["format"].as_str().unwrap_or("PNG");
             let bytes_per_pixel = match format {
-                "JPG" | "jpg" | "JPEG" | "jpeg" => 0.5,
-                "WEBP" | "webp" => 0.3,
-                "GIF" | "gif" => 0.4,
+                "JPG" | "jpg" | "JPEG" | "jpeg" => 0.25,
+                "WEBP" | "webp" => 0.2,
+                "GIF" | "gif" => 0.3,
                 "BMP" | "bmp" => 3.0,
-                "TIFF" | "tiff" | "TIF" | "tif" => 4.0,
-                _ => 3.0,
+                "TIFF" | "tiff" | "TIF" | "tif" => 2.0,
+                _ => 1.5,
             };
             let size = (w * h) as f64 * bytes_per_pixel * (count as f64) / 1_048_576.0;
-            format!("~{:.1} MB", size.max(0.01))
+            let secs = count * 2;
+            format_estimate_string(size.max(0.01), secs as u64)
         }
         "audio" => {
             let duration: f64 = cfg["duration"].as_f64().unwrap_or(60.0);
@@ -582,7 +584,8 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
                 _ => 128.0,
             };
             let size = (duration * kbps * 1000.0 / 8.0) * (count as f64) / 1_048_576.0;
-            format!("~{:.1} MB", size.max(0.01))
+            let secs = (duration * 0.15 * count as f64) as u64;
+            format_estimate_string(size.max(0.01), secs.max(1))
         }
         "video" => {
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
@@ -590,15 +593,47 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
             let duration: f64 = cfg["duration"].as_f64().unwrap_or(60.0);
             let fps: u64 = cfg["fps"].as_u64().unwrap_or(30);
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
+            let content_type = cfg["contentType"].as_str().unwrap_or("gradient");
+            let codec = cfg["codec"].as_str().unwrap_or("h264");
             let add_audio = cfg["addAudioTrack"].as_bool() == Some(true);
-            let kbps = (w * h * fps) as f64 * 0.1 / 1000.0;
+
+            // bits-per-pixel varies by content complexity
+            let bpp = match content_type {
+                "solid" => 0.03,
+                "gradient" => 0.05,
+                "pattern" => 0.08,
+                "noise" => 0.12,
+                "plasma" | "waves" | "kaleidoscope" | "audioviz" => 0.18,
+                _ => 0.08,
+            };
+            // H.265 is ~30% more efficient
+            let codec_factor = if codec == "hevc" { 0.7 } else { 1.0 };
+            let kbps = (w * h * fps) as f64 * bpp * codec_factor / 1000.0;
             let mut size = (duration * kbps * 1000.0 / 8.0) * (count as f64) / 1_048_576.0;
             if add_audio {
                 size += (duration * 128_000.0 / 8.0) * (count as f64) / 1_048_576.0;
             }
-            format!("~{:.1} MB", size.max(0.01))
+
+            // Processing time: slow effects need 3-5x realtime, fast ones 1-2x
+            let speed_factor = match content_type {
+                "solid" | "gradient" | "pattern" => 1.5,
+                "noise" => 3.0,
+                _ => 4.0,
+            };
+            let secs = (duration * speed_factor * count as f64) as u64;
+            format_estimate_string(size.max(0.01), secs.max(1))
         }
         _ => "~0 MB".to_string(),
+    }
+}
+
+fn format_estimate_string(size_mb: f64, secs: u64) -> String {
+    if secs >= 60 {
+        let min = secs / 60;
+        let s = secs % 60;
+        format!("~{:.1} MB / 约{}分{}秒", size_mb, min, s)
+    } else {
+        format!("~{:.1} MB / 约{}秒", size_mb, secs)
     }
 }
 
@@ -641,7 +676,7 @@ async fn generate_images(
                 "TIFF" | "tiff" | "TIF" | "tif" => "tiff",
                 _ => "png",
             };
-            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
+            let filename = make_filename(&config.prefix, None, i, &random_str, ext);
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
 
@@ -749,7 +784,7 @@ async fn generate_images(
 
         if !generated && retries >= max_retries {
             failed += 1;
-            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+            errors.push(serde_json::json!({ "file": make_file_label(&config.prefix, None, i), "error": "Failed to generate unique file after 10 retries" }));
         }
 
         if generated {
@@ -767,7 +802,7 @@ async fn generate_images(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": format!("{}_{:03}", config.prefix, i),
+            "currentFile": make_file_label(&config.prefix, None, i),
             "estimatedRemainingSecs": eta,
         }));
     }
@@ -817,7 +852,7 @@ async fn generate_audio(
             }
 
             let random_str = random_hex(6);
-            let filename = format!("{}_{:03}_{}.{}", config.prefix, i, random_str, ext);
+            let filename = make_filename(&config.prefix, None, i, &random_str, ext);
             let output_path = output_dir.join(&filename);
 
             let seed: u32 = unique_seed();
@@ -907,7 +942,7 @@ async fn generate_audio(
 
         if !generated && retries >= max_retries {
             failed += 1;
-            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+            errors.push(serde_json::json!({ "file": make_file_label(&config.prefix, None, i), "error": "Failed to generate unique file after 10 retries" }));
         }
 
         if generated {
@@ -925,7 +960,7 @@ async fn generate_audio(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": format!("{}_{:03}", config.prefix, i),
+            "currentFile": make_file_label(&config.prefix, None, i),
             "estimatedRemainingSecs": eta,
         }));
     }
@@ -982,7 +1017,7 @@ async fn generate_videos(
             }
 
             let random_str = random_hex(6);
-            let filename = format!("{}_{}_{:03}_{}.{}", config.prefix, ct_label, i, random_str, ext);
+            let filename = make_filename(&config.prefix, Some(ct_label), i, &random_str, ext);
             let output_path = output_dir.join(&filename);
 
             let seed: u32 = unique_seed();
@@ -1293,7 +1328,7 @@ async fn generate_videos(
 
         if !generated && retries >= max_retries {
             failed += 1;
-            errors.push(serde_json::json!({ "file": format!("{}_{:03}", config.prefix, i), "error": "Failed to generate unique file after 10 retries" }));
+            errors.push(serde_json::json!({ "file": make_file_label(&config.prefix, Some(ct_label), i), "error": "Failed to generate unique file after 10 retries" }));
         }
 
         if generated {
@@ -1311,7 +1346,7 @@ async fn generate_videos(
         let _ = app.emit("generation-progress", serde_json::json!({
             "current": i,
             "total": total,
-            "currentFile": format!("{}_{:03}", config.prefix, i),
+            "currentFile": make_file_label(&config.prefix, Some(ct_label), i),
             "estimatedRemainingSecs": eta,
         }));
     }
@@ -1338,16 +1373,34 @@ fn content_type_label(ct: &str) -> &str {
 }
 
 fn create_timestamp_dir(base: &str, prefix: &str, content_type: Option<&str>) -> Result<std::path::PathBuf, String> {
-    // 使用系统本地时区（国内 Mac 一般为北京时间）；格式为 MMDD_HHmmss
     let stamp = chrono::Local::now().format("%m%d_%H%M%S").to_string();
-    let dir_name = if let Some(ct) = content_type {
-        format!("{}_{}_{}", prefix, ct, stamp)
-    } else {
-        format!("{}_{}", prefix, stamp)
+    let dir_name = match (prefix.is_empty(), content_type) {
+        (true, Some(ct)) => format!("{}_{}", ct, stamp),
+        (true, None) => stamp,
+        (false, Some(ct)) => format!("{}_{}_{}", prefix, ct, stamp),
+        (false, None) => format!("{}_{}", prefix, stamp),
     };
     let dir = std::path::PathBuf::from(base).join(&dir_name);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Failed to create directory: {}", e))?;
     Ok(dir)
+}
+
+fn make_filename(prefix: &str, extra: Option<&str>, i: u32, random_str: &str, ext: &str) -> String {
+    match (prefix.is_empty(), extra) {
+        (true, Some(ex)) => format!("{}_{:03}_{}.{}", ex, i, random_str, ext),
+        (true, None) => format!("{:03}_{}.{}", i, random_str, ext),
+        (false, Some(ex)) => format!("{}_{}_{:03}_{}.{}", prefix, ex, i, random_str, ext),
+        (false, None) => format!("{}_{:03}_{}.{}", prefix, i, random_str, ext),
+    }
+}
+
+fn make_file_label(prefix: &str, extra: Option<&str>, i: u32) -> String {
+    match (prefix.is_empty(), extra) {
+        (true, Some(ex)) => format!("{}_{:03}", ex, i),
+        (true, None) => format!("{:03}", i),
+        (false, Some(ex)) => format!("{}_{}_{:03}", prefix, ex, i),
+        (false, None) => format!("{}_{:03}", prefix, i),
+    }
 }
 
 fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) -> String {
@@ -1431,7 +1484,7 @@ async fn generate_music(
             serde_json::json!({
                 "current": success + failed,
                 "total": total,
-                "currentFile": format!("{}_{:03}", config.prefix, i),
+                "currentFile": make_file_label(&config.prefix, None, i),
                 "estimatedRemainingSecs": estimated_remaining,
             }),
         );
@@ -1441,7 +1494,7 @@ async fn generate_music(
             Err(e) => {
                 failed += 1;
                 errors.push(serde_json::json!({
-                    "file": format!("{}_{:03}", config.prefix, i),
+                    "file": make_file_label(&config.prefix, None, i),
                     "error": e,
                 }));
             }
