@@ -648,7 +648,8 @@ async fn generate_images(
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
     let start_time = std::time::Instant::now();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
+    let folder_label = image_source_folder_label(&config.image_source);
+    let output_dir = create_timestamp_dir(&save_path, folder_label, None)?;
     let total = config.count;
     let mut success = 0u32;
     let mut failed = 0u32;
@@ -828,7 +829,7 @@ async fn generate_audio(
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
     let start_time = std::time::Instant::now();
-    let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
+    let output_dir = create_timestamp_dir(&save_path, "音频", None)?;
 
     let total = config.count;
     let mut success = 0u32;
@@ -1387,6 +1388,15 @@ fn content_type_label(ct: &str) -> &str {
         "kaleidoscope" => "万花筒",
         "audioviz" => "音频可视化",
         _ => ct,
+    }
+}
+
+fn image_source_folder_label(source: &str) -> &str {
+    match source {
+        "network" => "云端生图",
+        "anime" => "二次元",
+        "boudoir" => "NSFW",
+        _ => "本地生图",
     }
 }
 
