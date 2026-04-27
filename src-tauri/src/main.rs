@@ -995,7 +995,10 @@ async fn generate_videos(
             let f = config.fps;
             let hw = (w / 2).max(2);
             let hh = (h / 2).max(2);
+            let qw = (w / 4).max(2);
+            let qh = (h / 4).max(2);
             let seed_phase = (seed % 1000) as f32 * 0.01;
+            let seed_hue = ((seed % 36) * 10) as f32; // 0,10,20,...,350 degrees
             let filter = match config.content_type.as_str() {
                 "solid" => {
                     let color_hue = (seed % 360) as f32;
@@ -1015,9 +1018,10 @@ async fn generate_videos(
                     (seed % 180 + 60) as f32 * speed
                 ),
                 "noise" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N+{sd})*255':g='random(Y+N*2+{sd})*255':b='random(X*Y+N*3+{sd})*255',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N+{sd})*255':g='random(Y+N*2+{sd})*255':b='random(X*Y+N*3+{sd})*255',hue=H={hue},scale={}x{}:flags=bilinear",
+                    qw, qh, f, duration_str, w, h,
                     sd = seed,
+                    hue = seed_hue,
                 ),
                 "plasma" => format!(
                     "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s}+{sp})*cos(Y/H*6.283+T*{s}*0.7+{sp})':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3+{sp})*cos((X-Y)/(W+H)*9.425+T*{s}*0.9+{sp})':b='128+127*cos(X/W*7.854+T*{s}*0.8+{sp})*sin(Y/H*7.854+T*{s}*1.1+{sp})',scale={}x{}:flags=bilinear",
