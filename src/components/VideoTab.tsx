@@ -39,7 +39,7 @@ const FPS_OPTIONS = [30, 60];
 const CONTENT_OPTIONS: { value: VideoContentType; label: string }[] = [
   { value: "gradient", label: "随机渐变" },
   { value: "pattern", label: "彩条图案" },
-  { value: "noise", label: "元胞噪声 (生成慢)" },
+  { value: "noise", label: "元胞噪声" },
   { value: "plasma", label: "等离子动态 (生成慢)" },
   { value: "waves", label: "波纹律动 (生成慢)" },
   { value: "kaleidoscope", label: "万花筒 (生成慢)" },

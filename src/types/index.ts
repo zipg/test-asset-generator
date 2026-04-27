@@ -129,4 +129,5 @@ export interface TaskResult {
   success: number;
   failed: number;
   errors: Array<{ file: string; error: string }>;
+  elapsedSecs?: number;
 }

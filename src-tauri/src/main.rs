@@ -620,7 +620,7 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
                 "gradient" => 0.3,
                 "pattern" => 0.4,
                 "noise" => 0.5,
-                "plasma" | "waves" | "kaleidoscope" | "audioviz" => 3.0,
+                "plasma" | "waves" | "kaleidoscope" | "audioviz" => 1.5,
                 _ => 1.0,         // cellauto default
             };
             let secs = (duration * speed_factor * count as f64) as u64;
@@ -647,6 +647,7 @@ async fn generate_images(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
+    let start_time = std::time::Instant::now();
     let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
     let total = config.count;
     let mut success = 0u32;
@@ -810,10 +811,12 @@ async fn generate_images(
         }));
     }
 
+    let elapsed_secs = start_time.elapsed().as_secs_f64();
     Ok(serde_json::json!({
         "success": success,
         "failed": failed,
         "errors": errors,
+        "elapsedSecs": (elapsed_secs * 10.0).round() / 10.0,
     }))
 }
 
@@ -824,6 +827,7 @@ async fn generate_audio(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
+    let start_time = std::time::Instant::now();
     let output_dir = create_timestamp_dir(&save_path, &config.prefix, None)?;
 
     let total = config.count;
@@ -968,10 +972,12 @@ async fn generate_audio(
         }));
     }
 
+    let elapsed_secs = start_time.elapsed().as_secs_f64();
     Ok(serde_json::json!({
         "success": success,
         "failed": failed,
         "errors": errors,
+        "elapsedSecs": (elapsed_secs * 10.0).round() / 10.0,
     }))
 }
 
@@ -982,6 +988,7 @@ async fn generate_videos(
     save_path: String,
 ) -> Result<serde_json::Value, String> {
     reset_cancel();
+    let start_time = std::time::Instant::now();
     let output_dir = create_timestamp_dir(&save_path, &config.prefix, Some(content_type_label(&config.content_type)))?;
 
     let total = config.count;
@@ -1033,7 +1040,10 @@ async fn generate_videos(
             let f = config.fps;
             let hw = (w / 2).max(2);
             let hh = (h / 2).max(2);
+            let qw = (w / 4).max(2);
+            let qh = (h / 4).max(2);
             let seed_phase = (seed % 1000) as f32 * 0.01;
+            let seed_hue = ((seed % 36) * 10) as f32;
             let filter = match config.content_type.as_str() {
                 "solid" => {
                     let color_hue = (seed % 360) as f32;
@@ -1061,28 +1071,32 @@ async fn generate_videos(
                     )
                 },
                 "plasma" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s}+{sp})*cos(Y/H*6.283+T*{s}*0.7+{sp})':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3+{sp})*cos((X-Y)/(W+H)*9.425+T*{s}*0.9+{sp})':b='128+127*cos(X/W*7.854+T*{s}*0.8+{sp})*sin(Y/H*7.854+T*{s}*1.1+{sp})',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s}+{sp})*cos(Y/H*6.283+T*{s}*0.7+{sp})':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3+{sp})*cos((X-Y)/(W+H)*9.425+T*{s}*0.9+{sp})':b='128+127*cos(X/W*7.854+T*{s}*0.8+{sp})*sin(Y/H*7.854+T*{s}*1.1+{sp})',hue=H={hue},scale={}x{}:flags=bilinear",
+                    qw, qh, f, duration_str, w, h,
                     s = speed * 2.0,
                     sp = seed_phase,
+                    hue = seed_hue,
                 ),
                 "waves" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s}+{sp})*cos(X/20+{sp})':g='128+100*cos(X/15+T*{s}*1.2+{sp})*sin(Y/18+{sp})':b='128+100*sin((X+Y)/18+T*{s}*1.4+{sp})',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s}+{sp})*cos(X/20+{sp})':g='128+100*cos(X/15+T*{s}*1.2+{sp})*sin(Y/18+{sp})':b='128+100*sin((X+Y)/18+T*{s}*1.4+{sp})',hue=H={hue},scale={}x{}:flags=bilinear",
+                    qw, qh, f, duration_str, w, h,
                     s = speed * 2.0,
                     sp = seed_phase,
+                    hue = seed_hue,
                 ),
                 "kaleidoscope" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s}+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s}+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})',hue=H={hue},scale={}x{}:flags=bilinear",
+                    qw, qh, f, duration_str, w, h,
                     s = speed * 2.0,
                     sp = seed_phase,
+                    hue = seed_hue,
                 ),
                 "audioviz" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}+{sp}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2+{sp}))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5+{sp}))+0.03),40,0)',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h,
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}+{sp}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2+{sp}))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5+{sp}))+0.03),40,0)',hue=H={hue},scale={}x{}:flags=bilinear",
+                    qw, qh, f, duration_str, w, h,
                     s = speed * 2.0,
                     sp = seed_phase,
+                    hue = seed_hue,
                 ),
                 _ => {
                     let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
@@ -1353,10 +1367,12 @@ async fn generate_videos(
         }));
     }
 
+    let elapsed_secs = start_time.elapsed().as_secs_f64();
     Ok(serde_json::json!({
         "success": success,
         "failed": failed,
         "errors": errors,
+        "elapsedSecs": (elapsed_secs * 10.0).round() / 10.0,
     }))
 }
 
@@ -1503,10 +1519,12 @@ async fn generate_music(
         }
     }
 
+    let elapsed_secs = start_time.elapsed().as_secs_f64();
     Ok(serde_json::json!({
         "success": success,
         "failed": failed,
         "errors": errors,
+        "elapsedSecs": (elapsed_secs * 10.0).round() / 10.0,
     }))
 }
 
