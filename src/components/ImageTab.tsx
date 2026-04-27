@@ -69,20 +69,22 @@ export default function ImageTab({
   }, [config, onEstimate]);
 
   const handleWidthChange = useCallback((w: number) => {
+    const val = w || 2;
     if (lockAspect) {
-      const h = Math.round(w * ASPECT_RATIO / 2) * 2;
-      onConfigChange({ width: w, height: h });
+      const h = Math.round(val * ASPECT_RATIO);
+      onConfigChange({ width: val, height: h });
     } else {
-      onConfigChange({ width: w });
+      onConfigChange({ width: val });
     }
   }, [lockAspect, onConfigChange]);
 
   const handleHeightChange = useCallback((h: number) => {
+    const val = h || 2;
     if (lockAspect) {
-      const w = Math.round(h / ASPECT_RATIO / 2) * 2;
-      onConfigChange({ width: w, height: h });
+      const w = Math.round(val / ASPECT_RATIO);
+      onConfigChange({ width: w, height: val });
     } else {
-      onConfigChange({ height: h });
+      onConfigChange({ height: val });
     }
   }, [lockAspect, onConfigChange]);
 

@@ -988,11 +988,14 @@ async fn generate_videos(
             let seed: u32 = unique_seed();
 
             let speed = config.dynamics as f32 / 5.0;
-            let w = (config.width.max(2) / 2) * 2;
-            let h = (config.height.max(2) / 2) * 2;
+            let w = config.width.max(2);
+            let h = config.height.max(2);
+            let odd_dims = w % 2 != 0 || h % 2 != 0;
+            let pix_fmt = if odd_dims { "yuv444p" } else { "yuv420p" };
             let f = config.fps;
             let hw = (w / 2).max(2);
             let hh = (h / 2).max(2);
+            let seed_phase = (seed % 1000) as f32 * 0.01;
             let filter = match config.content_type.as_str() {
                 "solid" => {
                     let color_hue = (seed % 360) as f32;
@@ -1012,28 +1015,33 @@ async fn generate_videos(
                     (seed % 180 + 60) as f32 * speed
                 ),
                 "noise" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N)*255':g='random(Y+N*2)*255':b='random(X*Y+N*3)*255',scale={}x{}:flags=bilinear",
-                    hw, hh, f, duration_str, w, h
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='random(X+N+{sd})*255':g='random(Y+N*2+{sd})*255':b='random(X*Y+N*3+{sd})*255',scale={}x{}:flags=bilinear",
+                    hw, hh, f, duration_str, w, h,
+                    sd = seed,
                 ),
                 "plasma" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s})*cos(Y/H*6.283+T*{s}*0.7)':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3)*cos((X-Y)/(W+H)*9.425+T*{s}*0.9)':b='128+127*cos(X/W*7.854+T*{s}*0.8)*sin(Y/H*7.854+T*{s}*1.1)',scale={}x{}:flags=bilinear",
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*sin(X/W*6.283+T*{s}+{sp})*cos(Y/H*6.283+T*{s}*0.7+{sp})':g='128+127*sin((X+Y)/(W+H)*9.425+T*{s}*1.3+{sp})*cos((X-Y)/(W+H)*9.425+T*{s}*0.9+{sp})':b='128+127*cos(X/W*7.854+T*{s}*0.8+{sp})*sin(Y/H*7.854+T*{s}*1.1+{sp})',scale={}x{}:flags=bilinear",
                     hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
+                    sp = seed_phase,
                 ),
                 "waves" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s})*cos(X/20)':g='128+100*cos(X/15+T*{s}*1.2)*sin(Y/18)':b='128+100*sin((X+Y)/18+T*{s}*1.4)',scale={}x{}:flags=bilinear",
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+100*sin(Y/12+T*{s}+{sp})*cos(X/20+{sp})':g='128+100*cos(X/15+T*{s}*1.2+{sp})*sin(Y/18+{sp})':b='128+100*sin((X+Y)/18+T*{s}*1.4+{sp})',scale={}x{}:flags=bilinear",
                     hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
+                    sp = seed_phase,
                 ),
                 "kaleidoscope" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s})*sin(hypot(X-W/2,Y-H/2)/18)':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8)*sin(hypot(X-W/2,Y-H/2)/18)':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1)*sin(hypot(X-W/2,Y-H/2)/18)',scale={}x{}:flags=bilinear",
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='128+127*cos(atan2(Y-H/2,X-W/2)*6+T*{s}+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':g='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*2+T*{s}*0.8+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})':b='128+127*cos(atan2(Y-H/2,X-W/2)*6+PI/3*4+T*{s}*1.1+{sp})*sin(hypot(X-W/2,Y-H/2)/18+{sp})',scale={}x{}:flags=bilinear",
                     hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
+                    sp = seed_phase,
                 ),
                 "audioviz" => format!(
-                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5))+0.03),40,0)',scale={}x{}:flags=bilinear",
+                    "nullsrc=size={}x{}:rate={}:duration={},geq=r='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.5*floor(30*X/W)+T*{s}+{sp}))+0.03),255,0)':g='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(cos(0.6*floor(30*X/W)+T*{s}*1.2+{sp}))+0.03),100,0)':b='if(lt(abs(30*X/W-floor(30*X/W)-0.5),0.2*abs(sin(0.7*floor(30*X/W)+T*{s}*1.5+{sp}))+0.03),40,0)',scale={}x{}:flags=bilinear",
                     hw, hh, f, duration_str, w, h,
                     s = speed * 2.0,
+                    sp = seed_phase,
                 ),
                 _ => {
                     let rules = [18u32, 22, 26, 30, 34, 38, 42, 46, 50, 54, 58, 62, 66, 70, 74, 78, 82, 86, 90, 94, 98, 102, 106, 110, 114, 118, 122, 126, 130, 134, 138, 142, 146, 150];
@@ -1060,12 +1068,13 @@ async fn generate_videos(
             };
 
             let mut args: Vec<String> = vec!["-y".to_string()];
+            let mut temp_wav: Option<std::path::PathBuf> = None;
 
             let add_audio = config.add_audio_track && config.audio_engine != "none";
             if add_audio {
                 if config.audio_engine == "fluidsynth" {
                     // 真实乐器: 生成临时 WAV，再与视频合并
-                    let temp_wav = output_dir.join(format!("vida_{}.wav", random_hex(4)));
+                    temp_wav = Some(output_dir.join(format!("vida_{}.wav", random_hex(4))));
                     let all_music = crate::music_library::get_all_music();
                     let piece = &all_music[(seed as usize) % all_music.len()];
                     let melody_notes = (piece.notes)();
@@ -1081,7 +1090,7 @@ async fn generate_videos(
                         120,
                         config.duration,
                         &sf_path,
-                        &temp_wav,
+                        &temp_wav.as_ref().unwrap(),
                         22050,
                         inst,
                         true,
@@ -1091,7 +1100,7 @@ async fn generate_videos(
                     args.extend_from_slice(&[
                         "-f".to_string(), "lavfi".to_string(),
                         "-i".to_string(), filter.clone(),
-                        "-i".to_string(), temp_wav.to_str().unwrap().to_string(),
+                        "-i".to_string(), temp_wav.as_ref().unwrap().to_str().unwrap().to_string(),
                         "-map".to_string(), "0:v".to_string(),
                         "-map".to_string(), "1:a".to_string(),
                         "-shortest".to_string(),
@@ -1168,8 +1177,11 @@ async fn generate_videos(
                     "-b:a".to_string(),
                     "128k".to_string(),
                     "-pix_fmt".to_string(),
-                    "yuv420p".to_string(),
+                    pix_fmt.to_string(),
                 ]);
+                if odd_dims && vcodec == "libvpx-vp9" {
+                    args.extend_from_slice(&["-profile:v".to_string(), "1".to_string()]);
+                }
                 if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
                     args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
                 }
@@ -1214,8 +1226,11 @@ async fn generate_videos(
                     "-t".to_string(),
                     duration_str.clone(),
                     "-pix_fmt".to_string(),
-                    "yuv420p".to_string(),
+                    pix_fmt.to_string(),
                 ]);
+                if odd_dims && vcodec == "libvpx-vp9" {
+                    args.extend_from_slice(&["-profile:v".to_string(), "1".to_string()]);
+                }
                 if matches!(fmt_upper.as_str(), "MP4" | "MOV" | "3GP") {
                     args.extend_from_slice(&["-movflags".to_string(), "+faststart".to_string()]);
                 }
@@ -1247,15 +1262,18 @@ async fn generate_videos(
                                 // Duplicate MD5, retry with new seed
                                 retries += 1;
                                 let _ = std::fs::remove_file(&output_path);
+                                if let Some(ref p) = temp_wav { let _ = std::fs::remove_file(p); }
                                 continue;
                             }
                             seen_md5s.insert(md5_hash);
                             generated = true;
+                            if let Some(ref p) = temp_wav { let _ = std::fs::remove_file(p); }
                             break;
                         }
                         Err(e) => {
                             failed += 1;
                             errors.push(serde_json::json!({ "file": filename, "error": format!("MD5 check failed: {}", e) }));
+                            if let Some(ref p) = temp_wav { let _ = std::fs::remove_file(p); }
                             break;
                         }
                     }
@@ -1263,6 +1281,7 @@ async fn generate_videos(
                 Err(e) => {
                     failed += 1;
                     errors.push(serde_json::json!({ "file": filename, "error": e }));
+                    if let Some(ref p) = temp_wav { let _ = std::fs::remove_file(p); }
                     break;
                 }
             }
