@@ -24,7 +24,7 @@ export default function ResultSummary({ success, failed, errors }: Props) {
             <div className="error-list">
               {errors.map((e, i) => (
                 <div key={i} className="error-item">
-                  <strong>{e.file}:</strong> {e.error.slice(0, 200)}
+                  <strong>{e.file}:</strong> {e.error}
                 </div>
               ))}
             </div>

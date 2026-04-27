@@ -435,6 +435,10 @@ body {
   color: #ff3b30;
   padding: 4px 0;
   border-bottom: 1px solid #f0f0f0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .error-item:last-child {
