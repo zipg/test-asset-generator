@@ -70,7 +70,7 @@ export default function ImageTab({
 
   const handleWidthChange = useCallback((w: number) => {
     if (lockAspect) {
-      const h = Math.round(w * ASPECT_RATIO);
+      const h = Math.round(w * ASPECT_RATIO / 2) * 2;
       onConfigChange({ width: w, height: h });
     } else {
       onConfigChange({ width: w });
@@ -79,7 +79,7 @@ export default function ImageTab({
 
   const handleHeightChange = useCallback((h: number) => {
     if (lockAspect) {
-      const w = Math.round(h / ASPECT_RATIO);
+      const w = Math.round(h / ASPECT_RATIO / 2) * 2;
       onConfigChange({ width: w, height: h });
     } else {
       onConfigChange({ height: h });
@@ -252,16 +252,16 @@ export default function ImageTab({
             <input
               type="number"
               value={config.width}
-              min={1}
-              onChange={(e) => handleWidthChange(parseInt(e.target.value) || 1)}
+              min={2}
+              onChange={(e) => handleWidthChange(parseInt(e.target.value) || 2)}
               disabled={disabled || generating}
             />
             <span>x</span>
             <input
               type="number"
               value={config.height}
-              min={1}
-              onChange={(e) => handleHeightChange(parseInt(e.target.value) || 1)}
+              min={2}
+              onChange={(e) => handleHeightChange(parseInt(e.target.value) || 2)}
               disabled={disabled || generating}
             />
             <label className="checkbox-label">

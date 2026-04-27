@@ -87,7 +87,7 @@ export default function VideoTab({
 
   const handleWidthChange = useCallback((w: number) => {
     if (lockAspect) {
-      const h = Math.round(w * ASPECT_RATIO);
+      const h = Math.round(w * ASPECT_RATIO / 2) * 2;
       onConfigChange({ width: w, height: h });
     } else {
       onConfigChange({ width: w });
@@ -96,7 +96,7 @@ export default function VideoTab({
 
   const handleHeightChange = useCallback((h: number) => {
     if (lockAspect) {
-      const w = Math.round(h / ASPECT_RATIO);
+      const w = Math.round(h / ASPECT_RATIO / 2) * 2;
       onConfigChange({ width: w, height: h });
     } else {
       onConfigChange({ height: h });
