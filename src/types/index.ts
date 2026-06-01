@@ -16,9 +16,15 @@ export type VideoFormat =
   | "MKV"
   | "3GP";
 /** 图片内容类型 */
-export type ImageContentType = "solid" | "gradient" | "pattern" | "noise";
+export type ImageContentType =
+  | "solid"
+  | "gradient"
+  | "pattern"
+  | "noise"
+  | "reading_bg";
 /** 图片来源 */
 export type ImageSource = "generated" | "network" | "anime" | "boudoir";
+export type ReadingMaskStyle = "glass" | "light" | "dark" | "paper" | "solid";
 /** 视频内容类型 */
 export type VideoContentType =
   | "gradient"
@@ -48,6 +54,9 @@ export interface ImageConfig {
   prefix: string;
   imageSource: ImageSource;
   crop: boolean;
+  readingAreaWidthPct: number;
+  readingAreaHeightPct: number;
+  readingMaskStyle: ReadingMaskStyle;
 }
 
 export interface AudioConfig {

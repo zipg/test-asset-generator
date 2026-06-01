@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import type { ImageConfig, ImageFormat, ImageContentType, ImageSource } from "../types";
+import type {
+  ImageConfig,
+  ImageFormat,
+  ImageContentType,
+  ImageSource,
+  ReadingMaskStyle,
+} from "../types";
 
 interface Props {
   config: ImageConfig;
@@ -31,6 +37,14 @@ const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "solid", label: "纯色" },
   { value: "gradient", label: "渐变" },
   { value: "pattern", label: "图案(彩条)" },
+  { value: "reading_bg", label: "模拟阅读背景" },
+];
+const READING_MASK_OPTIONS: { value: ReadingMaskStyle; label: string }[] = [
+  { value: "glass", label: "玻璃" },
+  { value: "light", label: "浅色块" },
+  { value: "dark", label: "深色块" },
+  { value: "paper", label: "纸张" },
+  { value: "solid", label: "实色" },
 ];
 
 const ASPECT_RATIO = 16 / 9;
@@ -65,6 +79,7 @@ export default function ImageTab({
       count: config.count,
       imageSource: config.imageSource ?? "generated",
       crop: config.crop ?? true,
+      contentType: config.contentType,
     }).then(setEstimate);
   }, [config, onEstimate]);
 
@@ -127,6 +142,7 @@ export default function ImageTab({
   const imageSource = config.imageSource ?? "generated";
   const isRemote = imageSource !== "generated";
   const isCloudOrOther = imageSource === "network" || imageSource === "boudoir" || imageSource === "anime";
+  const isReadingBg = !isRemote && config.contentType === "reading_bg";
 
   return (
     <div className="tab-panel">
@@ -286,6 +302,52 @@ export default function ImageTab({
             ))}
           </select>
         </div>
+      )}
+      {isReadingBg && (
+        <>
+          <div className="form-row">
+            <label>文字区域宽度</label>
+            <div className="range-with-value">
+              <input
+                type="range"
+                value={config.readingAreaWidthPct ?? 82}
+                min={50}
+                max={94}
+                step={1}
+                onChange={(e) => onConfigChange({ readingAreaWidthPct: parseInt(e.target.value) })}
+                disabled={disabled || generating}
+              />
+              <span className="range-value">{config.readingAreaWidthPct ?? 82}%</span>
+            </div>
+          </div>
+          <div className="form-row">
+            <label>文字区域高度</label>
+            <div className="range-with-value">
+              <input
+                type="range"
+                value={config.readingAreaHeightPct ?? 72}
+                min={35}
+                max={90}
+                step={1}
+                onChange={(e) => onConfigChange({ readingAreaHeightPct: parseInt(e.target.value) })}
+                disabled={disabled || generating}
+              />
+              <span className="range-value">{config.readingAreaHeightPct ?? 72}%</span>
+            </div>
+          </div>
+          <div className="form-row">
+            <label>遮罩风格</label>
+            <select
+              value={config.readingMaskStyle ?? "glass"}
+              onChange={(e) => onConfigChange({ readingMaskStyle: e.target.value as ReadingMaskStyle })}
+              disabled={disabled || generating}
+            >
+              {READING_MASK_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+        </>
       )}
       <div className="form-row">
         <label>文件数量</label>

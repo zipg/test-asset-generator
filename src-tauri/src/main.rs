@@ -343,6 +343,24 @@ async fn fetch_anime_image() -> Result<Vec<u8>, String> {
     Err(format!("所有二次元接口均不可用:\n{}", errors.join("\n")))
 }
 
+async fn fetch_random_reading_background_bytes(width: u32, height: u32, seed: u32) -> Result<Vec<u8>, String> {
+    if seed % 2 == 0 {
+        match fetch_anime_image().await {
+            Ok(bytes) => Ok(bytes),
+            Err(anime_err) => fetch_network_image_bytes(width, height, true).await.map_err(|network_err| {
+                format!("二次元图源失败: {}\n云端图源失败: {}", anime_err, network_err)
+            }),
+        }
+    } else {
+        match fetch_network_image_bytes(width, height, true).await {
+            Ok(bytes) => Ok(bytes),
+            Err(network_err) => fetch_anime_image().await.map_err(|anime_err| {
+                format!("云端图源失败: {}\n二次元图源失败: {}", network_err, anime_err)
+            }),
+        }
+    }
+}
+
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
@@ -552,11 +570,20 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
     match media_type.as_str() {
         "image" => {
             let image_source = cfg["imageSource"].as_str().unwrap_or("generated");
+            let content_type = cfg["contentType"].as_str().unwrap_or("gradient");
             if image_source == "network" || image_source == "anime" || image_source == "boudoir" {
                 let count = cfg["count"].as_u64().unwrap_or(1);
                 let size = count as f64 * 0.5;
                 let secs = count as f64 * 5.0;
                 return format_estimate_string(size.max(0.01), secs as u64);
+            }
+            if content_type == "reading_bg" {
+                let count = cfg["count"].as_u64().unwrap_or(1);
+                let w: u64 = cfg["width"].as_u64().unwrap_or(720);
+                let h: u64 = cfg["height"].as_u64().unwrap_or(1280);
+                let size = (w * h) as f64 * 0.35 * (count as f64) / 1_048_576.0;
+                let secs = count * 6;
+                return format_estimate_string(size.max(0.01), secs.max(1));
             }
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
             let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
@@ -685,7 +712,33 @@ async fn generate_images(
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
 
-            let gen_result = match config.image_source.as_str() {
+            let gen_result = if config.image_source == "generated" && config.content_type == "reading_bg" {
+                let raw_bytes = fetch_random_reading_background_bytes(config.width, config.height, seed).await?;
+                let tmp_path = output_dir.join(format!("_tmp_reading_{:06}_{}.jpg", i, seed));
+                std::fs::write(&tmp_path, &raw_bytes)
+                    .map_err(|e| format!("写入临时文件失败: {}", e))?;
+
+                let filter = build_reading_background_filter(&config);
+                let mut args: Vec<String> = vec![
+                    "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
+                    "-filter_complex".to_string(), filter,
+                    "-map".to_string(), "[out]".to_string(),
+                    "-vframes".to_string(), "1".to_string(),
+                    "-y".to_string(),
+                ];
+                match ext {
+                    "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+                    "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+                    "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
+                    _ => {}
+                }
+                args.push(output_path.to_str().unwrap().to_string());
+
+                let result = ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 90);
+                let _ = std::fs::remove_file(&tmp_path);
+                result
+            } else {
+                match config.image_source.as_str() {
                 "network" | "anime" | "boudoir" => {
                     let raw_bytes: Vec<u8> = if config.image_source == "boudoir" {
                         fetch_boudoir_image().await?
@@ -754,6 +807,7 @@ async fn generate_images(
                     args.push(output_path.to_str().unwrap().to_string());
 
                     ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30)
+                }
                 }
             };
 
@@ -1429,6 +1483,46 @@ fn make_file_label(prefix: &str, extra: Option<&str>, i: u32) -> String {
         (false, Some(ex)) => format!("{}_{}_{:03}", prefix, ex, i),
         (false, None) => format!("{}_{:03}", prefix, i),
     }
+}
+
+fn reading_mask_color(style: &str) -> (&'static str, u32) {
+    match style {
+        "light" => ("white@0.56", 10),
+        "dark" => ("black@0.44", 12),
+        "paper" => ("0xF7EEDC@0.72", 6),
+        "solid" => ("0xF6F6F2@0.90", 2),
+        _ => ("white@0.30", 18),
+    }
+}
+
+fn build_reading_background_filter(config: &config::ImageConfig) -> String {
+    let w = config.width.max(2);
+    let h = config.height.max(2);
+    let area_w_pct = config.reading_area_width_pct.clamp(50, 94);
+    let area_h_pct = config.reading_area_height_pct.clamp(35, 90);
+    let area_w = (w * area_w_pct / 100).max(2);
+    let area_h = (h * area_h_pct / 100).max(2);
+    let x = (w - area_w) / 2;
+    let y = (h - area_h) / 2;
+    let (mask_color, blur_radius) = reading_mask_color(&config.reading_mask_style);
+
+    format!(
+        "[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=rgba[base];\
+         [base]split[bg][fg];\
+         [fg]crop={area_w}:{area_h}:{x}:{y},boxblur=luma_radius={blur}:luma_power=1:chroma_radius={blur}:chroma_power=1[blurred];\
+         [bg][blurred]overlay={x}:{y}[pane];\
+         [pane]drawbox=x={x}:y={y}:w={area_w}:h={area_h}:color={mask}:t=fill,\
+         drawbox=x={x}:y={y}:w={area_w}:h={area_h}:color=white@0.35:t=2,\
+         format=rgb24[out]",
+        w = w,
+        h = h,
+        area_w = area_w,
+        area_h = area_h,
+        x = x,
+        y = y,
+        blur = blur_radius,
+        mask = mask_color,
+    )
 }
 
 fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) -> String {

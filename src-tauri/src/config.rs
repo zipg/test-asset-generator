@@ -17,6 +17,12 @@ pub struct ImageConfig {
     pub image_source: String,
     #[serde(default = "default_crop")]
     pub crop: bool,
+    #[serde(default = "default_reading_area_width_pct")]
+    pub reading_area_width_pct: u32,
+    #[serde(default = "default_reading_area_height_pct")]
+    pub reading_area_height_pct: u32,
+    #[serde(default = "default_reading_mask_style")]
+    pub reading_mask_style: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +142,18 @@ fn default_crop() -> bool {
     true
 }
 
+fn default_reading_area_width_pct() -> u32 {
+    82
+}
+
+fn default_reading_area_height_pct() -> u32 {
+    72
+}
+
+fn default_reading_mask_style() -> String {
+    "glass".to_string()
+}
+
 fn default_music_config() -> MusicConfig {
     MusicConfig {
         format: "MP3".to_string(),
@@ -167,6 +185,9 @@ impl Default for AppConfig {
                 prefix: String::new(),
                 image_source: "generated".to_string(),
                 crop: true,
+                reading_area_width_pct: default_reading_area_width_pct(),
+                reading_area_height_pct: default_reading_area_height_pct(),
+                reading_mask_style: default_reading_mask_style(),
             },
             audio_config: AudioConfig {
                 format: "MP3".to_string(),
