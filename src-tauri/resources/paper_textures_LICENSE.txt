@@ -1,0 +1,7 @@
+Paper texture assets are from Transparent Textures:
+
+- paper_texture_1.png: https://www.transparenttextures.com/patterns/paper-fibers.png
+- paper_texture_2.png: https://www.transparenttextures.com/patterns/rice-paper-2.png
+- paper_texture_3.png: https://www.transparenttextures.com/patterns/cream-paper.png
+
+Transparent Textures patterns are based on Subtle Patterns assets.

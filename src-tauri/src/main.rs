@@ -18,7 +18,7 @@ use rand::Rng;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 /// Compute MD5 hash of a file
 fn file_md5(path: &std::path::Path) -> Result<String, String> {
     let data = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -718,14 +718,28 @@ async fn generate_images(
                 std::fs::write(&tmp_path, &raw_bytes)
                     .map_err(|e| format!("写入临时文件失败: {}", e))?;
 
-                let filter = build_reading_background_filter(&config);
+                let style = resolve_reading_mask_style(&config.reading_mask_style, seed);
+                let paper_texture = if style == "paper" {
+                    reading_paper_texture_path(&app, seed)
+                } else {
+                    None
+                };
+                let filter = build_reading_background_filter(&config, seed, style, paper_texture.is_some());
                 let mut args: Vec<String> = vec![
                     "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
+                ];
+                if let Some(texture_path) = &paper_texture {
+                    args.extend_from_slice(&[
+                        "-stream_loop".to_string(), "-1".to_string(),
+                        "-i".to_string(), texture_path.to_str().unwrap().to_string(),
+                    ]);
+                }
+                args.extend_from_slice(&[
                     "-filter_complex".to_string(), filter,
                     "-map".to_string(), "[out]".to_string(),
                     "-vframes".to_string(), "1".to_string(),
                     "-y".to_string(),
-                ];
+                ]);
                 match ext {
                     "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
                     "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
@@ -1485,17 +1499,61 @@ fn make_file_label(prefix: &str, extra: Option<&str>, i: u32) -> String {
     }
 }
 
-fn reading_mask_color(style: &str) -> (&'static str, u32) {
+fn resolve_reading_mask_style(style: &str, seed: u32) -> &'static str {
+    if style != "random" {
+        return match style {
+            "light" => "light",
+            "dark" => "dark",
+            "paper" => "paper",
+            "solid" => "solid",
+            _ => "glass",
+        };
+    }
+    ["glass", "light", "dark", "paper", "solid"][(seed as usize) % 5]
+}
+
+fn reading_paper_texture_path(app: &tauri::AppHandle, seed: u32) -> Option<std::path::PathBuf> {
+    let files = [
+        "resources/paper_texture_1.png",
+        "resources/paper_texture_2.png",
+        "resources/paper_texture_3.png",
+    ];
+    for offset in 0..files.len() {
+        let idx = (seed as usize + offset) % files.len();
+        if let Ok(path) = app.path().resolve(files[idx], tauri::path::BaseDirectory::Resource) {
+            if path.exists() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
+fn reading_mask_style(style: &str) -> (&'static str, u32, &'static str, u32) {
     match style {
-        "light" => ("white@0.56", 10),
-        "dark" => ("black@0.44", 12),
-        "paper" => ("0xF7EEDC@0.72", 6),
-        "solid" => ("0xF6F6F2@0.90", 2),
-        _ => ("white@0.30", 18),
+        "light" => ("white@0.58", 12, "white", 72),
+        "dark" => ("black@0.46", 14, "white", 58),
+        "paper" => ("0xF7EEDC@0.44", 5, "white", 54),
+        "solid" => ("0xF6F6F2@0.92", 2, "white", 48),
+        _ => ("white@0.26", 22, "white", 84),
     }
 }
 
-fn build_reading_background_filter(config: &config::ImageConfig) -> String {
+fn rounded_alpha_expr(width: u32, height: u32, radius: u32, alpha: u32) -> String {
+    let rx = (width as f64 / 2.0 - radius as f64).max(0.0);
+    let ry = (height as f64 / 2.0 - radius as f64).max(0.0);
+    let r2 = (radius * radius) as f64;
+    format!(
+        "if(gte(abs(X-W/2)-{rx:.2},0)*gte(abs(Y-H/2)-{ry:.2},0),if(lte(pow(abs(X-W/2)-{rx:.2},2)+pow(abs(Y-H/2)-{ry:.2},2),{r2:.2}),{alpha},0),{alpha})"
+    )
+}
+
+fn build_reading_background_filter(
+    config: &config::ImageConfig,
+    seed: u32,
+    style: &str,
+    has_paper_texture: bool,
+) -> String {
     let w = config.width.max(2);
     let h = config.height.max(2);
     let area_w_pct = config.reading_area_width_pct.clamp(50, 94);
@@ -1504,24 +1562,58 @@ fn build_reading_background_filter(config: &config::ImageConfig) -> String {
     let area_h = (h * area_h_pct / 100).max(2);
     let x = (w - area_w) / 2;
     let y = (h - area_h) / 2;
-    let (mask_color, blur_radius) = reading_mask_color(&config.reading_mask_style);
+    let min_side = area_w.min(area_h);
+    let radius_pct = 5 + (seed % 8);
+    let radius = ((min_side * radius_pct / 100).max(10)).min(min_side / 2);
+    let edge_pad = x.min(y).min(8);
+    let edge_w = area_w + edge_pad * 2;
+    let edge_h = area_h + edge_pad * 2;
+    let edge_x = x - edge_pad;
+    let edge_y = y - edge_pad;
+    let edge_radius = (radius + edge_pad).min(edge_w.min(edge_h) / 2);
+    let (mask_color, blur_sigma, edge_color, edge_alpha) = reading_mask_style(style);
+    let pane_alpha = rounded_alpha_expr(area_w, area_h, radius, 255);
+    let edge_alpha_expr = rounded_alpha_expr(edge_w, edge_h, edge_radius, edge_alpha);
+
+    let pane_filter = if style == "paper" && has_paper_texture {
+        format!(
+            "[blurred]drawbox=x=0:y=0:w={area_w}:h={area_h}:color={mask}:t=fill[paper_base];\
+             [1:v]scale={area_w}:{area_h}:force_original_aspect_ratio=increase,crop={area_w}:{area_h},format=rgba,colorchannelmixer=aa=0.42[paper_tex];\
+             [paper_base][paper_tex]overlay=0:0[pane]",
+            mask = mask_color,
+        )
+    } else {
+        format!("[blurred]drawbox=x=0:y=0:w={area_w}:h={area_h}:color={mask}:t=fill[pane]", mask = mask_color)
+    };
 
     format!(
         "[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},format=rgba[base];\
          [base]split[bg][fg];\
-         [fg]crop={area_w}:{area_h}:{x}:{y},boxblur=luma_radius={blur}:luma_power=1:chroma_radius={blur}:chroma_power=1[blurred];\
-         [bg][blurred]overlay={x}:{y}[pane];\
-         [pane]drawbox=x={x}:y={y}:w={area_w}:h={area_h}:color={mask}:t=fill,\
-         drawbox=x={x}:y={y}:w={area_w}:h={area_h}:color=white@0.35:t=2,\
-         format=rgb24[out]",
+         [fg]crop={area_w}:{area_h}:{x}:{y},gblur=sigma={blur}:steps=3[blurred];\
+         {pane_filter};\
+         [pane]format=rgba[pane_rgba];\
+         color=white:s={area_w}x{area_h},format=gray,geq=lum='{pane_alpha}'[pane_mask];\
+         [pane_rgba][pane_mask]alphamerge[pane_round];\
+         color={edge_color}:s={edge_w}x{edge_h},format=rgba[edge_base];\
+         color=white:s={edge_w}x{edge_h},format=gray,geq=lum='{edge_alpha_expr}'[edge_mask];\
+         [edge_base][edge_mask]alphamerge[edge_round];\
+         [bg][edge_round]overlay={edge_x}:{edge_y}[with_edge];\
+         [with_edge][pane_round]overlay={x}:{y},format=rgb24[out]",
         w = w,
         h = h,
         area_w = area_w,
         area_h = area_h,
         x = x,
         y = y,
-        blur = blur_radius,
-        mask = mask_color,
+        blur = blur_sigma,
+        pane_filter = pane_filter,
+        pane_alpha = pane_alpha,
+        edge_color = edge_color,
+        edge_w = edge_w,
+        edge_h = edge_h,
+        edge_alpha_expr = edge_alpha_expr,
+        edge_x = edge_x,
+        edge_y = edge_y,
     )
 }
 

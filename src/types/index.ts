@@ -24,7 +24,13 @@ export type ImageContentType =
   | "reading_bg";
 /** 图片来源 */
 export type ImageSource = "generated" | "network" | "anime" | "boudoir";
-export type ReadingMaskStyle = "glass" | "light" | "dark" | "paper" | "solid";
+export type ReadingMaskStyle =
+  | "random"
+  | "glass"
+  | "light"
+  | "dark"
+  | "paper"
+  | "solid";
 /** 视频内容类型 */
 export type VideoContentType =
   | "gradient"

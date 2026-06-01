@@ -40,6 +40,7 @@ const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "reading_bg", label: "模拟阅读背景" },
 ];
 const READING_MASK_OPTIONS: { value: ReadingMaskStyle; label: string }[] = [
+  { value: "random", label: "随机" },
   { value: "glass", label: "玻璃" },
   { value: "light", label: "浅色块" },
   { value: "dark", label: "深色块" },
@@ -306,7 +307,7 @@ export default function ImageTab({
       {isReadingBg && (
         <>
           <div className="form-row">
-            <label>文字区域宽度</label>
+            <label>文字区宽度</label>
             <div className="range-with-value">
               <input
                 type="range"
@@ -321,7 +322,7 @@ export default function ImageTab({
             </div>
           </div>
           <div className="form-row">
-            <label>文字区域高度</label>
+            <label>文字区高度</label>
             <div className="range-with-value">
               <input
                 type="range"
