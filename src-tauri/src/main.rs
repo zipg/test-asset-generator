@@ -19,6 +19,13 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 use tauri::{Emitter, Manager};
+
+struct ImageJobResult {
+    index: u32,
+    filename: String,
+    output_path: std::path::PathBuf,
+    result: Result<(), String>,
+}
 /// Compute MD5 hash of a file
 fn file_md5(path: &std::path::Path) -> Result<String, String> {
     let data = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
@@ -361,6 +368,185 @@ async fn fetch_random_reading_background_bytes(width: u32, height: u32, seed: u3
     }
 }
 
+fn image_output_ext(format: &str) -> &'static str {
+    match format {
+        "JPG" | "jpg" | "JPEG" | "jpeg" => "jpg",
+        "WEBP" | "webp" => "webp",
+        "GIF" | "gif" => "gif",
+        "BMP" | "bmp" => "bmp",
+        "TIFF" | "tiff" | "TIF" | "tif" => "tiff",
+        _ => "png",
+    }
+}
+
+fn reading_background_concurrency(total: u32) -> usize {
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    let workers = cores.saturating_sub(1).clamp(2, 6);
+    workers.min(total.max(1) as usize)
+}
+
+async fn generate_single_reading_background_image(
+    app: tauri::AppHandle,
+    config: config::ImageConfig,
+    output_dir: std::path::PathBuf,
+    index: u32,
+) -> ImageJobResult {
+    let ext = image_output_ext(&config.format);
+    let random_str = random_hex(6);
+    let filename = make_filename(&config.prefix, None, index, &random_str, ext);
+    let output_path = output_dir.join(&filename);
+    let seed = unique_seed();
+
+    let result = async {
+        let raw_bytes = fetch_random_reading_background_bytes(config.width, config.height, seed).await?;
+        let tmp_path = output_dir.join(format!("_tmp_reading_{:06}_{}.jpg", index, seed));
+        std::fs::write(&tmp_path, &raw_bytes)
+            .map_err(|e| format!("写入临时文件失败: {}", e))?;
+
+        let style = resolve_reading_mask_style(&config.reading_mask_style, seed);
+        let paper_texture = if style == "paper" {
+            reading_paper_texture_path(&app, seed)
+        } else {
+            None
+        };
+        let filter = build_reading_background_filter(&config, seed, style, paper_texture.is_some());
+        let mut args: Vec<String> = vec![
+            "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
+        ];
+        if let Some(texture_path) = &paper_texture {
+            args.extend_from_slice(&[
+                "-stream_loop".to_string(), "-1".to_string(),
+                "-i".to_string(), texture_path.to_str().unwrap().to_string(),
+            ]);
+        }
+        args.extend_from_slice(&[
+            "-filter_complex".to_string(), filter,
+            "-map".to_string(), "[out]".to_string(),
+            "-vframes".to_string(), "1".to_string(),
+            "-y".to_string(),
+        ]);
+        match ext {
+            "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
+            "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
+            "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
+            _ => {}
+        }
+        args.push(output_path.to_str().unwrap().to_string());
+
+        let app_for_ffmpeg = app.clone();
+        let ffmpeg_result = tauri::async_runtime::spawn_blocking(move || {
+            ffmpeg::run_ffmpeg_for_app(Some(&app_for_ffmpeg), &args, 90).map(|_| ())
+        })
+        .await
+        .map_err(|e| format!("FFmpeg 任务失败: {}", e))?;
+        let _ = std::fs::remove_file(&tmp_path);
+        ffmpeg_result
+    }
+    .await;
+
+    ImageJobResult {
+        index,
+        filename,
+        output_path,
+        result,
+    }
+}
+
+async fn generate_reading_background_images_parallel(
+    app: tauri::AppHandle,
+    config: config::ImageConfig,
+    output_dir: std::path::PathBuf,
+    total: u32,
+    start_time: std::time::Instant,
+) -> Result<serde_json::Value, String> {
+    let concurrency = reading_background_concurrency(total);
+    let mut success = 0u32;
+    let mut failed = 0u32;
+    let mut errors: Vec<serde_json::Value> = Vec::new();
+    let mut seen_md5s: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut next_index = 1u32;
+    let mut active: Vec<tauri::async_runtime::JoinHandle<ImageJobResult>> = Vec::new();
+
+    while next_index <= total || !active.is_empty() {
+        while next_index <= total && active.len() < concurrency && !get_cancel() {
+            active.push(tauri::async_runtime::spawn(generate_single_reading_background_image(
+                app.clone(),
+                config.clone(),
+                output_dir.clone(),
+                next_index,
+            )));
+            next_index += 1;
+        }
+
+        if active.is_empty() {
+            break;
+        }
+
+        let handle = active.remove(0);
+        let job = handle
+            .await
+            .map_err(|e| format!("生成任务失败: {}", e))?;
+
+        match job.result {
+            Ok(()) => {
+                match file_md5(&job.output_path) {
+                    Ok(md5_hash) => {
+                        if seen_md5s.contains(&md5_hash) {
+                            failed += 1;
+                            let _ = std::fs::remove_file(&job.output_path);
+                            errors.push(serde_json::json!({ "file": job.filename, "error": "生成图片重复，已跳过" }));
+                        } else {
+                            seen_md5s.insert(md5_hash);
+                            success += 1;
+                        }
+                    }
+                    Err(e) => {
+                        failed += 1;
+                        errors.push(serde_json::json!({ "file": job.filename, "error": format!("MD5 check failed: {}", e) }));
+                    }
+                }
+            }
+            Err(e) => {
+                failed += 1;
+                errors.push(serde_json::json!({ "file": job.filename, "error": e }));
+            }
+        }
+
+        let completed = success + failed;
+        let elapsed_secs = start_time.elapsed().as_secs_f64();
+        let eta = if completed > 0 {
+            ((total.saturating_sub(completed)) as f64 * elapsed_secs / completed as f64).max(0.0) as u32
+        } else {
+            0
+        };
+
+        let _ = app.emit("generation-progress", serde_json::json!({
+            "current": completed,
+            "total": total,
+            "currentFile": make_file_label(&config.prefix, None, job.index),
+            "estimatedRemainingSecs": eta,
+        }));
+
+        if get_cancel() {
+            break;
+        }
+    }
+
+    for handle in active {
+        handle.abort();
+    }
+
+    let elapsed_secs = start_time.elapsed().as_secs_f64();
+    Ok(serde_json::json!({
+        "success": success,
+        "failed": failed,
+        "errors": errors,
+        "elapsedSecs": (elapsed_secs * 10.0).round() / 10.0,
+    }))
+}
+
 async fn fetch_url_bytes(url: &str) -> Result<Vec<u8>, String> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300))
@@ -678,6 +864,9 @@ async fn generate_images(
     let folder_label = image_source_folder_label(&config.image_source);
     let output_dir = create_timestamp_dir(&save_path, folder_label, None)?;
     let total = config.count;
+    if config.image_source == "generated" && config.content_type == "reading_bg" {
+        return generate_reading_background_images_parallel(app, config, output_dir, total, start_time).await;
+    }
     let mut success = 0u32;
     let mut failed = 0u32;
     let mut errors: Vec<serde_json::Value> = Vec::new();
@@ -700,59 +889,12 @@ async fn generate_images(
             }
 
             let random_str = random_hex(6);
-            let ext = match config.format.as_str() {
-                "JPG" | "jpg" | "JPEG" | "jpeg" => "jpg",
-                "WEBP" | "webp" => "webp",
-                "GIF" | "gif" => "gif",
-                "BMP" | "bmp" => "bmp",
-                "TIFF" | "tiff" | "TIF" | "tif" => "tiff",
-                _ => "png",
-            };
+            let ext = image_output_ext(&config.format);
             let filename = make_filename(&config.prefix, None, i, &random_str, ext);
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
 
-            let gen_result = if config.image_source == "generated" && config.content_type == "reading_bg" {
-                let raw_bytes = fetch_random_reading_background_bytes(config.width, config.height, seed).await?;
-                let tmp_path = output_dir.join(format!("_tmp_reading_{:06}_{}.jpg", i, seed));
-                std::fs::write(&tmp_path, &raw_bytes)
-                    .map_err(|e| format!("写入临时文件失败: {}", e))?;
-
-                let style = resolve_reading_mask_style(&config.reading_mask_style, seed);
-                let paper_texture = if style == "paper" {
-                    reading_paper_texture_path(&app, seed)
-                } else {
-                    None
-                };
-                let filter = build_reading_background_filter(&config, seed, style, paper_texture.is_some());
-                let mut args: Vec<String> = vec![
-                    "-i".to_string(), tmp_path.to_str().unwrap().to_string(),
-                ];
-                if let Some(texture_path) = &paper_texture {
-                    args.extend_from_slice(&[
-                        "-stream_loop".to_string(), "-1".to_string(),
-                        "-i".to_string(), texture_path.to_str().unwrap().to_string(),
-                    ]);
-                }
-                args.extend_from_slice(&[
-                    "-filter_complex".to_string(), filter,
-                    "-map".to_string(), "[out]".to_string(),
-                    "-vframes".to_string(), "1".to_string(),
-                    "-y".to_string(),
-                ]);
-                match ext {
-                    "jpg" => args.extend_from_slice(&["-q:v".to_string(), "2".to_string()]),
-                    "webp" => args.extend_from_slice(&["-quality".to_string(), "90".to_string()]),
-                    "tiff" => args.extend_from_slice(&["-compression_algo".to_string(), "deflate".to_string()]),
-                    _ => {}
-                }
-                args.push(output_path.to_str().unwrap().to_string());
-
-                let result = ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 90);
-                let _ = std::fs::remove_file(&tmp_path);
-                result
-            } else {
-                match config.image_source.as_str() {
+            let gen_result = match config.image_source.as_str() {
                 "network" | "anime" | "boudoir" => {
                     let raw_bytes: Vec<u8> = if config.image_source == "boudoir" {
                         fetch_boudoir_image().await?
@@ -821,7 +963,6 @@ async fn generate_images(
                     args.push(output_path.to_str().unwrap().to_string());
 
                     ffmpeg::run_ffmpeg_for_app(Some(&app), &args, 30)
-                }
                 }
             };
 
