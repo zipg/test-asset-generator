@@ -1878,17 +1878,63 @@ fn escape_drawtext_text(text: &str) -> String {
         .replace(',', "\\,")
 }
 
+fn escape_drawtext_path(path: &str) -> String {
+    path.replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('\'', "\\'")
+        .replace(',', "\\,")
+}
+
+fn sticker_text_font_arg() -> String {
+    let candidates = if std::env::consts::OS == "windows" {
+        vec![
+            "C:\\Windows\\Fonts\\msyh.ttc",
+            "C:\\Windows\\Fonts\\simhei.ttf",
+            "C:\\Windows\\Fonts\\simsun.ttc",
+        ]
+    } else if std::env::consts::OS == "macos" {
+        vec![
+            "/System/Library/Fonts/PingFang.ttc",
+            "/Library/Fonts/Arial Unicode.ttf",
+            "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+            "/System/Library/Fonts/STHeiti Medium.ttc",
+            "/System/Library/Fonts/STHeiti Light.ttc",
+        ]
+    } else {
+        vec![
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+        ]
+    };
+
+    for path in candidates {
+        if std::path::Path::new(path).exists() {
+            return format!(":fontfile='{}'", escape_drawtext_path(path));
+        }
+    }
+    String::new()
+}
+
 fn build_sticker_text_filter(width: u32, height: u32, seed: u32) -> String {
     let w = width.max(2);
     let h = height.max(2);
     let min_side = w.min(h);
-    let text = escape_drawtext_text(sticker_text_copy(seed));
-    let font_size = (min_side * (4 + seed % 4) / 100).clamp(18, 72);
-    let pad = (font_size * (1 + seed % 3) / 2).max(8);
+    let raw_text = sticker_text_copy(seed);
+    let text = escape_drawtext_text(raw_text);
+    let text_chars = raw_text.chars().count() as u32;
+    let max_tag_w = match seed % 3 {
+        0 | 1 => w.saturating_mul(38) / 100,
+        _ => w.saturating_mul(56) / 100,
+    }
+    .max(48);
+    let base_font_size = (min_side * (2 + seed % 3) / 100).clamp(14, 42);
+    let fit_font_size = (max_tag_w * 20 / (text_chars.max(1) * 13)).max(10);
+    let font_size = base_font_size.min(fit_font_size).clamp(10, 42);
+    let pad = (font_size * (1 + seed % 2) / 2).max(6);
     let box_h = (font_size + pad * 2).min(h.max(1));
-    let text_chars = sticker_text_copy(seed).chars().count() as u32;
-    let estimated_text_w = (font_size * text_chars * 11 / 20).max(font_size);
-    let box_w = (estimated_text_w + pad * 2).min(w.max(1));
+    let estimated_text_w = (font_size * text_chars * 13 / 20).max(font_size);
+    let box_w = (estimated_text_w + pad * 2).min(max_tag_w).min(w.max(1));
     let angle_deg = match seed % 5 {
         0 => -5,
         1 => -2,
@@ -1933,12 +1979,13 @@ fn build_sticker_text_filter(width: u32, height: u32, seed: u32) -> String {
     } else {
         String::new()
     };
+    let font_arg = sticker_text_font_arg();
 
     format!(
         "color=c=black@0:s={w}x{h}:d=1,format=rgba[base];\
          color=c=black@0:s={box_w}x{box_h}:d=1,format=rgba,\
          {box_filter}\
-         drawtext=text='{text}':x={pad}:y=(h-text_h)/2:fontsize={font_size}:fontcolor={text_color}:borderw=1:bordercolor={border_color},\
+         drawtext=text='{text}'{font_arg}:x={pad}:y=(h-text_h)/2:fontsize={font_size}:fontcolor={text_color}:borderw=1:bordercolor={border_color},\
          rotate={angle}:fillcolor=black@0:ow=rotw(iw):oh=roth(ih),format=rgba[tag];\
          [base][tag]overlay={x}:{y}:format=auto,format=rgba",
         angle = angle_rad,
