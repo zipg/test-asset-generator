@@ -771,6 +771,13 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
                 let secs = count * 6;
                 return format_estimate_string(size.max(0.01), secs.max(1));
             }
+            if content_type == "border_frame" {
+                let count = cfg["count"].as_u64().unwrap_or(1);
+                let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
+                let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
+                let size = (w * h) as f64 * 0.25 * (count as f64) / 1_048_576.0;
+                return format_estimate_string(size.max(0.01), count.max(1));
+            }
             let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
             let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
             let count: u64 = cfg["count"].as_u64().unwrap_or(1);
@@ -1591,6 +1598,7 @@ fn content_type_label(ct: &str) -> &str {
         "solid" => "纯色",
         "gradient" => "渐变",
         "pattern" => "彩条图案",
+        "border_frame" => "纯色边框图",
         "noise" => "元胞噪声",
         "plasma" => "等离子动态",
         "waves" => "波纹律动",
@@ -1770,6 +1778,7 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
             "gradients=s={}x{}:c0=random:c1=random:seed={}",
             width, height, seed
         ),
+        "border_frame" => build_border_frame_filter(width, height, seed),
         // testsrc2 alone is identical every run; hue shifts bars so each seed yields a distinct image (unique MD5).
         "pattern" => format!(
             "testsrc2=size={}x{},hue=h={}",
@@ -1793,6 +1802,37 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
                 rule, width, height, seed, fill_ratio, width, height
             )
         }
+    }
+}
+
+fn color_from_seed(seed: u32, salt: u32) -> String {
+    let mut value = seed
+        .wrapping_mul(1_664_525)
+        .wrapping_add(1_013_904_223)
+        .wrapping_add(salt.wrapping_mul(2_654_435_761));
+    value ^= value >> 16;
+    format!("0x{:06x}", value & 0x00ff_ffff)
+}
+
+fn build_border_frame_filter(width: u32, height: u32, seed: u32) -> String {
+    let w = width.max(2);
+    let h = height.max(2);
+    let min_side = w.min(h);
+    let border_pct = 5 + (seed % 14);
+    let border = ((min_side * border_pct / 100).max(2)).min(min_side / 2);
+    let inner_w = w.saturating_sub(border * 2).max(1);
+    let inner_h = h.saturating_sub(border * 2).max(1);
+    let c0 = color_from_seed(seed, 11);
+    let c1 = color_from_seed(seed, 29);
+
+    if seed % 2 == 0 {
+        format!(
+            "color=c={c0}:s={w}x{h}:d=1,format=rgba,drawbox=x={border}:y={border}:w={inner_w}:h={inner_h}:color=black@0:t=fill"
+        )
+    } else {
+        format!(
+            "gradients=s={w}x{h}:c0={c0}:c1={c1}:seed={seed},format=rgba,drawbox=x={border}:y={border}:w={inner_w}:h={inner_h}:color=black@0:t=fill"
+        )
     }
 }
 
