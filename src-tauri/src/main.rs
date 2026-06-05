@@ -1818,20 +1818,24 @@ fn build_border_frame_filter(width: u32, height: u32, seed: u32) -> String {
     let w = width.max(2);
     let h = height.max(2);
     let min_side = w.min(h);
-    let border_pct = 5 + (seed % 14);
-    let border = ((min_side * border_pct / 100).max(2)).min(min_side / 2);
-    let inner_w = w.saturating_sub(border * 2).max(1);
-    let inner_h = h.saturating_sub(border * 2).max(1);
+    let border_pct = 1 + (seed % 5);
+    let border = ((min_side * border_pct / 100).max(1)).min((min_side / 2).max(1));
     let c0 = color_from_seed(seed, 11);
     let c1 = color_from_seed(seed, 29);
+    let alpha_expr = format!(
+        "if(gt(X\\,{b_minus})*lt(X\\,{inner_right})*gt(Y\\,{b_minus})*lt(Y\\,{inner_bottom})\\,0\\,255)",
+        b_minus = border.saturating_sub(1),
+        inner_right = w.saturating_sub(border),
+        inner_bottom = h.saturating_sub(border),
+    );
 
     if seed % 2 == 0 {
         format!(
-            "color=c={c0}:s={w}x{h}:d=1,format=rgba,drawbox=x={border}:y={border}:w={inner_w}:h={inner_h}:color=black@0:t=fill"
+            "color=c={c0}:s={w}x{h}:d=1,format=rgba[frame];color=black:s={w}x{h}:d=1,format=gray,geq=lum='{alpha_expr}'[alpha];[frame][alpha]alphamerge,format=rgba"
         )
     } else {
         format!(
-            "gradients=s={w}x{h}:c0={c0}:c1={c1}:seed={seed},format=rgba,drawbox=x={border}:y={border}:w={inner_w}:h={inner_h}:color=black@0:t=fill"
+            "gradients=s={w}x{h}:c0={c0}:c1={c1}:seed={seed},format=rgba[frame];color=black:s={w}x{h}:d=1,format=gray,geq=lum='{alpha_expr}'[alpha];[frame][alpha]alphamerge,format=rgba"
         )
     }
 }
