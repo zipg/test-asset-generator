@@ -379,6 +379,15 @@ fn image_output_ext(format: &str) -> &'static str {
     }
 }
 
+fn image_output_ext_for_content(content_type: &str, format: &str) -> &'static str {
+    let ext = image_output_ext(format);
+    if (content_type == "sticker_text" || content_type == "border_frame") && matches!(ext, "jpg" | "bmp") {
+        "png"
+    } else {
+        ext
+    }
+}
+
 fn reading_background_concurrency(total: u32) -> usize {
     let cores = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -393,7 +402,7 @@ async fn generate_single_reading_background_image(
     output_dir: std::path::PathBuf,
     index: u32,
 ) -> ImageJobResult {
-    let ext = image_output_ext(&config.format);
+    let ext = image_output_ext_for_content(&config.content_type, &config.format);
     let random_str = random_hex(6);
     let filename = make_filename(&config.prefix, None, index, &random_str, ext);
     let output_path = output_dir.join(&filename);
@@ -771,7 +780,7 @@ fn estimate_size(media_type: String, cfg: serde_json::Value) -> String {
                 let secs = count * 6;
                 return format_estimate_string(size.max(0.01), secs.max(1));
             }
-            if content_type == "border_frame" {
+            if content_type == "sticker_text" || content_type == "border_frame" {
                 let count = cfg["count"].as_u64().unwrap_or(1);
                 let w: u64 = cfg["width"].as_u64().unwrap_or(1080);
                 let h: u64 = cfg["height"].as_u64().unwrap_or(1920);
@@ -896,7 +905,7 @@ async fn generate_images(
             }
 
             let random_str = random_hex(6);
-            let ext = image_output_ext(&config.format);
+            let ext = image_output_ext_for_content(&config.content_type, &config.format);
             let filename = make_filename(&config.prefix, None, i, &random_str, ext);
             let output_path = output_dir.join(&filename);
             let seed: u32 = unique_seed();
@@ -1598,7 +1607,7 @@ fn content_type_label(ct: &str) -> &str {
         "solid" => "纯色",
         "gradient" => "渐变",
         "pattern" => "彩条图案",
-        "border_frame" => "纯色边框图",
+        "sticker_text" | "border_frame" => "贴膜文案图",
         "noise" => "元胞噪声",
         "plasma" => "等离子动态",
         "waves" => "波纹律动",
@@ -1778,7 +1787,7 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
             "gradients=s={}x{}:c0=random:c1=random:seed={}",
             width, height, seed
         ),
-        "border_frame" => build_border_frame_filter(width, height, seed),
+        "sticker_text" | "border_frame" => build_sticker_text_filter(width, height, seed),
         // testsrc2 alone is identical every run; hue shifts bars so each seed yields a distinct image (unique MD5).
         "pattern" => format!(
             "testsrc2=size={}x{},hue=h={}",
@@ -1805,39 +1814,135 @@ fn build_image_filter(content_type: &str, width: u32, height: u32, seed: u32) ->
     }
 }
 
-fn color_from_seed(seed: u32, salt: u32) -> String {
-    let mut value = seed
-        .wrapping_mul(1_664_525)
-        .wrapping_add(1_013_904_223)
-        .wrapping_add(salt.wrapping_mul(2_654_435_761));
-    value ^= value >> 16;
-    format!("0x{:06x}", value & 0x00ff_ffff)
+fn sticker_text_copy(seed: u32) -> &'static str {
+    const COPIES: &[&str] = &[
+        "本文为虚构",
+        "七猫小说",
+        "七猫免费小说",
+        "七猫漫剧",
+        "七猫短剧",
+        "缪斯",
+        "缪斯素材",
+        "人工智障",
+        "精彩小说",
+        "精彩剧情",
+        "激情小说",
+        "激情短剧",
+        "劲爆剧情",
+        "劲爆小说",
+        "狗血故事",
+        "停不下来",
+        "爽文上头",
+        "反转不断",
+        "剧情高能",
+        "名场面来了",
+        "越看越上头",
+        "全员狠人",
+        "沉浸追更",
+        "爆款剧情",
+        "短剧素材",
+        "小说素材",
+        "剧情纯属虚构",
+        "请勿代入现实",
+        "脑洞大开",
+        "追更预警",
+        "高能片段",
+        "爽点密集",
+        "情节虚构",
+        "素材演示",
+        "免费畅读",
+        "爆笑剧情",
+        "虐恋剧情",
+        "逆袭故事",
+        "霸总剧情",
+        "豪门恩怨",
+        "重生逆袭",
+        "悬疑反转",
+        "甜虐交织",
+        "看完再睡",
+        "越刷越爽",
+        "纯属娱乐",
+        "灵感素材",
+        "文案贴膜",
+        "剧情标签",
+        "小说片段",
+        "短剧片段",
+    ];
+    COPIES[(seed as usize) % COPIES.len()]
 }
 
-fn build_border_frame_filter(width: u32, height: u32, seed: u32) -> String {
+fn escape_drawtext_text(text: &str) -> String {
+    text.replace('\\', "\\\\")
+        .replace(':', "\\:")
+        .replace('\'', "\\'")
+        .replace(',', "\\,")
+}
+
+fn build_sticker_text_filter(width: u32, height: u32, seed: u32) -> String {
     let w = width.max(2);
     let h = height.max(2);
     let min_side = w.min(h);
-    let border_pct = 1 + (seed % 5);
-    let border = ((min_side * border_pct / 100).max(1)).min((min_side / 2).max(1));
-    let c0 = color_from_seed(seed, 11);
-    let c1 = color_from_seed(seed, 29);
-    let alpha_expr = format!(
-        "if(gt(X\\,{b_minus})*lt(X\\,{inner_right})*gt(Y\\,{b_minus})*lt(Y\\,{inner_bottom})\\,0\\,255)",
-        b_minus = border.saturating_sub(1),
-        inner_right = w.saturating_sub(border),
-        inner_bottom = h.saturating_sub(border),
-    );
-
-    if seed % 2 == 0 {
+    let text = escape_drawtext_text(sticker_text_copy(seed));
+    let font_size = (min_side * (4 + seed % 4) / 100).clamp(18, 72);
+    let pad = (font_size * (1 + seed % 3) / 2).max(8);
+    let box_h = (font_size + pad * 2).min(h.max(1));
+    let text_chars = sticker_text_copy(seed).chars().count() as u32;
+    let estimated_text_w = (font_size * text_chars * 11 / 20).max(font_size);
+    let box_w = (estimated_text_w + pad * 2).min(w.max(1));
+    let angle_deg = match seed % 5 {
+        0 => -5,
+        1 => -2,
+        2 => 0,
+        3 => 2,
+        _ => 5,
+    };
+    let angle_rad = angle_deg as f64 * std::f64::consts::PI / 180.0;
+    let margin = (min_side * (2 + seed % 4) / 100).max(8);
+    let x = match seed % 3 {
+        0 => margin,
+        1 => w.saturating_sub(box_w + margin),
+        _ => (w.saturating_sub(box_w)) / 2,
+    };
+    let y = match seed % 3 {
+        0 | 1 => margin,
+        _ => h.saturating_sub(box_h + margin),
+    };
+    let text_color = match seed % 6 {
+        0 => "white@0.92",
+        1 => "black@0.82",
+        2 => "0xFFD166@0.94",
+        3 => "0xFF5A7A@0.92",
+        4 => "0x44D7B6@0.92",
+        _ => "0x7CC7FF@0.92",
+    };
+    let border_color = if text_color.starts_with("black") {
+        "white@0.34"
+    } else {
+        "black@0.32"
+    };
+    let box_filter = if seed % 2 == 0 {
+        let box_color = if text_color.starts_with("black") {
+            "white@0.24"
+        } else {
+            "black@0.22"
+        };
         format!(
-            "color=c={c0}:s={w}x{h}:d=1,format=rgba[frame];color=black:s={w}x{h}:d=1,format=gray,geq=lum='{alpha_expr}'[alpha];[frame][alpha]alphamerge,format=rgba"
+            "drawbox=x=0:y=0:w={box_w}:h={box_h}:color={box_color}:t=fill,\
+             drawbox=x=0:y=0:w={box_w}:h={box_h}:color={border_color}:t=2,"
         )
     } else {
-        format!(
-            "gradients=s={w}x{h}:c0={c0}:c1={c1}:seed={seed},format=rgba[frame];color=black:s={w}x{h}:d=1,format=gray,geq=lum='{alpha_expr}'[alpha];[frame][alpha]alphamerge,format=rgba"
-        )
-    }
+        String::new()
+    };
+
+    format!(
+        "color=c=black@0:s={w}x{h}:d=1,format=rgba[base];\
+         color=c=black@0:s={box_w}x{box_h}:d=1,format=rgba,\
+         {box_filter}\
+         drawtext=text='{text}':x={pad}:y=(h-text_h)/2:fontsize={font_size}:fontcolor={text_color}:borderw=1:bordercolor={border_color},\
+         rotate={angle}:fillcolor=black@0:ow=rotw(iw):oh=roth(ih),format=rgba[tag];\
+         [base][tag]overlay={x}:{y}:format=auto,format=rgba",
+        angle = angle_rad,
+    )
 }
 
 fn format_duration(secs: f64) -> String {

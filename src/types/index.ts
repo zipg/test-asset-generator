@@ -21,7 +21,7 @@ export type ImageContentType =
   | "gradient"
   | "pattern"
   | "noise"
-  | "border_frame"
+  | "sticker_text"
   | "reading_bg";
 /** 图片来源 */
 export type ImageSource = "generated" | "network" | "anime" | "boudoir";

@@ -37,7 +37,7 @@ const CONTENT_OPTIONS: { value: ImageContentType; label: string }[] = [
   { value: "solid", label: "纯色" },
   { value: "gradient", label: "渐变" },
   { value: "pattern", label: "图案(彩条)" },
-  { value: "border_frame", label: "纯色边框图" },
+  { value: "sticker_text", label: "贴膜文案图" },
   { value: "reading_bg", label: "模拟阅读背景" },
 ];
 const READING_MASK_OPTIONS: { value: ReadingMaskStyle; label: string }[] = [
