@@ -1923,35 +1923,40 @@ fn build_sticker_text_filter(width: u32, height: u32, seed: u32) -> String {
     let raw_text = sticker_text_copy(seed);
     let text = escape_drawtext_text(raw_text);
     let text_chars = raw_text.chars().count() as u32;
+    let position = seed % 3;
     let max_tag_w = match seed % 3 {
-        0 | 1 => w.saturating_mul(38) / 100,
-        _ => w.saturating_mul(56) / 100,
+        0 | 1 => w.saturating_mul(62) / 100,
+        _ => w.saturating_mul(76) / 100,
     }
-    .max(48);
-    let base_font_size = (min_side * (2 + seed % 3) / 100).clamp(14, 42);
-    let fit_font_size = (max_tag_w * 20 / (text_chars.max(1) * 13)).max(10);
-    let font_size = base_font_size.min(fit_font_size).clamp(10, 42);
+    .max(96);
+    let base_font_size = (min_side * (16 + seed % 10) / 1000).clamp(12, 30);
+    let fit_font_size = (max_tag_w * 100 / (text_chars.max(1) * 120)).max(9);
+    let font_size = base_font_size.min(fit_font_size).clamp(9, 30);
     let pad = (font_size * (1 + seed % 2) / 2).max(6);
-    let box_h = (font_size + pad * 2).min(h.max(1));
-    let estimated_text_w = (font_size * text_chars * 13 / 20).max(font_size);
-    let box_w = (estimated_text_w + pad * 2).min(max_tag_w).min(w.max(1));
+    let deco = (font_size / 2).max(6);
+    let box_h = (font_size * 2 + pad * 2).min(h.max(1));
+    let estimated_text_w = (font_size * text_chars * 11 / 10).max(font_size);
+    let box_w = (estimated_text_w + pad * 2 + deco).min(max_tag_w).min(w.max(1));
     let angle_deg = match seed % 5 {
-        0 => -5,
-        1 => -2,
+        0 => -3,
+        1 => -1,
         2 => 0,
-        3 => 2,
-        _ => 5,
+        3 => 1,
+        _ => 3,
     };
     let angle_rad = angle_deg as f64 * std::f64::consts::PI / 180.0;
     let margin = (min_side * (2 + seed % 4) / 100).max(8);
-    let x = match seed % 3 {
+    let rotated_pad = (font_size + pad).max(12);
+    let overlay_w = (box_w + rotated_pad * 2).min(w);
+    let overlay_h = (box_h + rotated_pad * 2).min(h);
+    let x = match position {
         0 => margin,
-        1 => w.saturating_sub(box_w + margin),
-        _ => (w.saturating_sub(box_w)) / 2,
+        1 => w.saturating_sub(overlay_w + margin),
+        _ => (w.saturating_sub(overlay_w)) / 2,
     };
-    let y = match seed % 3 {
+    let y = match position {
         0 | 1 => margin,
-        _ => h.saturating_sub(box_h + margin),
+        _ => h.saturating_sub(overlay_h + margin),
     };
     let text_color = match seed % 6 {
         0 => "white@0.92",
@@ -1966,27 +1971,74 @@ fn build_sticker_text_filter(width: u32, height: u32, seed: u32) -> String {
     } else {
         "black@0.32"
     };
-    let box_filter = if seed % 2 == 0 {
-        let box_color = if text_color.starts_with("black") {
-            "white@0.24"
-        } else {
-            "black@0.22"
-        };
-        format!(
-            "drawbox=x=0:y=0:w={box_w}:h={box_h}:color={box_color}:t=fill,\
-             drawbox=x=0:y=0:w={box_w}:h={box_h}:color={border_color}:t=2,"
-        )
+    let fill_color = if text_color.starts_with("black") {
+        "white@0.28"
     } else {
-        String::new()
+        "black@0.24"
     };
+    let accent_color = match seed % 6 {
+        0 => "0xFFD166@0.72",
+        1 => "0xFF5A7A@0.66",
+        2 => "0x44D7B6@0.66",
+        3 => "0x7CC7FF@0.66",
+        4 => "white@0.42",
+        _ => "black@0.36",
+    };
+    let stripe_h = (font_size / 4).max(2);
+    let corner_len = (font_size + pad).max(12).min(box_w / 3).min(box_h);
+    let side_w = (font_size / 5).max(3);
+    let text_band_y = (box_h - font_size) / 2;
+    let text_band_h = font_size + pad;
+    let right_side_x = box_w.saturating_sub(side_w);
+    let corner_right_x = box_w.saturating_sub(corner_len);
+    let corner_bottom_y = box_h.saturating_sub(3);
+    let corner_right_line_x = box_w.saturating_sub(3);
+    let corner_right_line_y = box_h.saturating_sub(corner_len);
+    let inset = pad / 2;
+    let inset_w = box_w.saturating_sub(pad).max(1);
+    let inset_h = box_h.saturating_sub(pad).max(1);
+    let stripe_y = (box_h - stripe_h) / 2;
+    let box_filter = match seed % 5 {
+        0 => format!(
+            "drawbox=x=0:y=0:w={box_w}:h={box_h}:color={fill_color}:t=fill,\
+             drawbox=x=0:y=0:w={box_w}:h={box_h}:color={border_color}:t=2,\
+             drawbox=x=0:y=0:w={box_w}:h={stripe_h}:color={accent_color}:t=fill,"
+        ),
+        1 => format!(
+            "drawbox=x=0:y={text_band_y}:w={box_w}:h={text_band_h}:color={fill_color}:t=fill,\
+             drawbox=x=0:y={text_band_y}:w={side_w}:h={text_band_h}:color={accent_color}:t=fill,\
+             drawbox=x={right_side_x}:y={text_band_y}:w={side_w}:h={text_band_h}:color={accent_color}:t=fill,"
+        ),
+        2 => format!(
+            "drawbox=x=0:y=0:w={corner_len}:h=3:color={accent_color}:t=fill,\
+             drawbox=x=0:y=0:w=3:h={corner_len}:color={accent_color}:t=fill,\
+             drawbox=x={corner_right_x}:y={corner_bottom_y}:w={corner_len}:h=3:color={accent_color}:t=fill,\
+             drawbox=x={corner_right_line_x}:y={corner_right_line_y}:w=3:h={corner_len}:color={accent_color}:t=fill,"
+        ),
+        3 => format!(
+            "drawbox=x=0:y=0:w={box_w}:h={box_h}:color={fill_color}:t=fill,\
+             drawbox=x={inset}:y={inset}:w={inset_w}:h={inset_h}:color={border_color}:t=2,"
+        ),
+        _ => format!(
+            "drawbox=x=0:y={stripe_y}:w={box_w}:h={stripe_h}:color={accent_color}:t=fill,"
+        ),
+    };
+    let text_x = if seed % 5 == 1 {
+        pad + side_w
+    } else {
+        pad + deco / 2
+    };
+    let padded_w = box_w + rotated_pad * 2;
+    let padded_h = box_h + rotated_pad * 2;
     let font_arg = sticker_text_font_arg();
 
     format!(
         "color=c=black@0:s={w}x{h}:d=1,format=rgba[base];\
          color=c=black@0:s={box_w}x{box_h}:d=1,format=rgba,\
          {box_filter}\
-         drawtext=text='{text}'{font_arg}:x={pad}:y=(h-text_h)/2:fontsize={font_size}:fontcolor={text_color}:borderw=1:bordercolor={border_color},\
-         rotate={angle}:fillcolor=black@0:ow=rotw(iw):oh=roth(ih),format=rgba[tag];\
+         drawtext=text='{text}'{font_arg}:x={text_x}:y=(h-text_h)/2:fontsize={font_size}:fontcolor={text_color}:borderw=1:bordercolor={border_color},\
+         pad={padded_w}:{padded_h}:{rotated_pad}:{rotated_pad}:color=black@0,\
+         rotate={angle}:fillcolor=black@0:ow=iw:oh=ih,format=rgba[tag];\
          [base][tag]overlay={x}:{y}:format=auto,format=rgba",
         angle = angle_rad,
     )
